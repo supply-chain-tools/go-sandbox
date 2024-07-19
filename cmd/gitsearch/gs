@@ -1,0 +1,7 @@
+if [[ -t 1 ]]
+then
+	# TTY; human interaction
+	gitsearch --color --heading --line-number $@ | LESSCHARSET=utf-8 less -F -R
+else
+	gitsearch $@
+fi

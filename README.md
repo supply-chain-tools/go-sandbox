@@ -20,7 +20,10 @@ Libraries
 ## Getting started
 
 ### Install
-*TBD*
+```sh
+go install github.com/supply-chain-tools/go-sandbox/cmd/repofetch@latest
+go install github.com/supply-chain-tools/go-sandbox/cmd/gitsearch@latest
+```
 
 ### Fetch and search repos
 [cmd/repofetch](cmd/repofetch) supports downloading repos from GitHub, including for entire orgs. 
@@ -38,3 +41,5 @@ Print the help instructions
 ```sh
 $ gs -h
 ```
+
+There is also a [tutorial](docs/gitsearch-tutorial.md).

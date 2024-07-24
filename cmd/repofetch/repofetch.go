@@ -3,27 +3,31 @@ package main
 import (
 	"flag"
 	"fmt"
-	"github.com/supply-chain-tools/go-sandbox/gitkit"
 	"log"
 	"log/slog"
 	"os"
-	"path/filepath"
-	"strings"
+
+	"github.com/supply-chain-tools/go-sandbox/gitkit"
 )
 
 const usage = `Usage:
-    repofetch <path>
+    repofetch [options] <path>
 
-Currently only the path prefix 'github.com/' is supported
+Options:
+    -d, -debug    Enable debug logging
+    -h, -help     Show help message
 
-Fetch all repos for one org/user
-    $ repofetch github.com/torvalds
+Environment Variables:
+    GITHUB_TOKEN  GitHub token for authenticated requests
 
-Fetch one repo
-    $ repofetch github.com/torvalds/linux`
+Currently, only the path prefix 'github.com/' is supported
 
-const configDirectory = ".supply-chain-tools"
-const githubTokenFileName = "github-token"
+Examples:
+    Fetch all repos for one org/user:
+        $ repofetch github.com/torvalds
+
+    Fetch one repo:
+        $ repofetch github.com/torvalds/linux`
 
 func main() {
 	flag.Usage = func() {
@@ -54,9 +58,9 @@ func main() {
 	slog.SetDefault(logger)
 
 	var client *gitkit.GitHubClient
-	token, err := readGitHubBasicAuth()
+	token, err := getGitHubToken()
 	if err != nil {
-		slog.Debug("GitHub token not found, using unauthenticated client")
+		slog.Debug(fmt.Sprintf("%s. Using unauthenticated client.", err.Error()))
 		client = gitkit.NewGitHubClient()
 	} else {
 		slog.Debug("GitHub token found")
@@ -87,27 +91,11 @@ func main() {
 	}
 }
 
-func readGitHubBasicAuth() (string, error) {
-	configDir, err := getConfigDirectory()
-	if err != nil {
-		return "", err
+func getGitHubToken() (string, error) {
+	const envVarName = "GITHUB_TOKEN"
+	token := os.Getenv(envVarName)
+	if token == "" {
+		return "", fmt.Errorf("GitHub token not set in environment variable %s", envVarName)
 	}
-
-	path := filepath.Join(configDir, githubTokenFileName)
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return "", err
-	}
-
-	result := strings.TrimSuffix(string(data), "\n")
-	return result, nil
-}
-
-func getConfigDirectory() (string, error) {
-	homeDirectory, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
-	}
-
-	return filepath.Join(homeDirectory, configDirectory), nil
+	return token, nil
 }

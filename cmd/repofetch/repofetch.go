@@ -11,18 +11,23 @@ import (
 )
 
 const usage = `Usage:
-    repofetch <path>
+    repofetch [options] <path>
 
-Currently only the path prefix 'github.com/' is supported
+Options:
+    -d, -debug    Enable debug logging
+    -h, -help     Show help message
 
-Fetch all repos for one org/user
-    $ repofetch github.com/torvalds
+Environment Variables:
+    GITHUB_TOKEN  GitHub token for authenticated requests
 
-Fetch one repo
-    $ repofetch github.com/torvalds/linux`
+Currently, only the path prefix 'github.com/' is supported
 
-const configDirectory = ".supply-chain-tools"
-const githubTokenFileName = "github-token"
+Examples:
+    Fetch all repos for one org/user:
+        $ repofetch github.com/torvalds
+
+    Fetch one repo:
+        $ repofetch github.com/torvalds/linux`
 
 func main() {
 	flag.Usage = func() {

@@ -133,7 +133,7 @@ func (gc *GitHubClient) ListAllReposForUser(user string) ([]*github.Repository, 
 	return repos, nil
 }
 
-func (gc *GitHubClient) CloneOrFetchGitHubToPath(org string, repoName string, path string) error {
+func (gc *GitHubClient) CloneOrFetchGitHubToPath(org string, repoName string, path string, depth int) error {
 	fmt.Printf("Cloning '%s/%s'\n", org, repoName)
 
 	var auth transport.AuthMethod = nil
@@ -144,11 +144,19 @@ func (gc *GitHubClient) CloneOrFetchGitHubToPath(org string, repoName string, pa
 		}
 	}
 
-	_, err := git.PlainClone(path, false, &git.CloneOptions{
+	// Use max depth if zero. See https://git-scm.com/docs/shallow
+	if depth == 0 {
+		depth = 2147483647
+	}
+
+	cloneOptions := &git.CloneOptions{
 		Auth:     auth,
 		URL:      "https://github.com/" + org + "/" + repoName,
+		Depth:    depth,
 		Progress: os.Stdout,
-	})
+	}
+
+	_, err := git.PlainClone(path, false, cloneOptions)
 	if err != nil {
 		errorString := err.Error()
 		if errorString == "repository already exists" {
@@ -163,6 +171,7 @@ func (gc *GitHubClient) CloneOrFetchGitHubToPath(org string, repoName string, pa
 				Auth:       auth,
 				Progress:   os.Stdout,
 				Prune:      true,
+				Depth:      depth,
 			})
 			if err != nil && err.Error() != "already up-to-date" && err.Error() != "remote repository is empty" {
 				return fmt.Errorf("unable to fetch repo '%s': %w", path, err)
@@ -177,7 +186,7 @@ func (gc *GitHubClient) CloneOrFetchGitHubToPath(org string, repoName string, pa
 	return nil
 }
 
-func (gc *GitHubClient) CloneOrFetchAllRepos(owner string, repoName *string, localBasePath string) error {
+func (gc *GitHubClient) CloneOrFetchAllRepos(owner string, repoName *string, localBasePath string, depth int) error {
 	orgInfo, isOrg, err := gc.GetGitHubOrganization(owner)
 	if err != nil {
 		return err
@@ -233,7 +242,7 @@ func (gc *GitHubClient) CloneOrFetchAllRepos(owner string, repoName *string, loc
 
 		for _, r := range allRepos {
 			repoPath := filepath.Join(ownerPath, r.GetName())
-			err = gc.CloneOrFetchGitHubToPath(owner, r.GetName(), repoPath)
+			err = gc.CloneOrFetchGitHubToPath(owner, r.GetName(), repoPath, depth)
 			if err != nil {
 				return err
 			}
@@ -270,7 +279,7 @@ func (gc *GitHubClient) CloneOrFetchAllRepos(owner string, repoName *string, loc
 			"repoName", repoName)
 
 		repoPath := filepath.Join(ownerPath, *repoName)
-		err = gc.CloneOrFetchGitHubToPath(owner, *repoName, repoPath)
+		err = gc.CloneOrFetchGitHubToPath(owner, *repoName, repoPath, depth)
 		if err != nil {
 			return err
 		}

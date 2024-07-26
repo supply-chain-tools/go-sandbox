@@ -139,7 +139,7 @@ func fetchRepositories(client *gitkit.GitHubClient, paths []string) error {
 			return fmt.Errorf("failed to extract owner and repo name for path %s: %w", path, err)
 		}
 
-		if err := client.CloneOrFetchAllRepos(owner, repoName, dir); err != nil {
+		if err := client.CloneOrFetchAllRepos(owner, repoName, dir, 0); err != nil {
 			return fmt.Errorf("failed to clone or fetch repos for %s/%s: %w", owner, *repoName, err)
 		}
 	}

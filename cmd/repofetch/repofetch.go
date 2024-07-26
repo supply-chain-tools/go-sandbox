@@ -16,6 +16,7 @@ const usage = `Usage:
   repofetch [options] <path>...
 
 Options:
+  --token      GitHub token
   --gh-auth    Use GitHub CLI for authentication
   --debug      Enable debug logging
   -h, --help   Display help
@@ -33,11 +34,18 @@ Examples:
   Fetch one repo:
     $ repofetch github.com/torvalds/linux`
 
+type options struct {
+	token         string
+	useGitHubAuth bool
+	debug         bool
+}
+
 func main() {
-	useGitHubAuth, debug, args := parseFlagsAndArgs()
+	opts := &options{}
+	args := parseFlagsAndArgs(opts)
 
 	logLevel := slog.LevelInfo
-	if debug {
+	if opts.debug {
 		logLevel = slog.LevelDebug
 	}
 
@@ -47,7 +55,7 @@ func main() {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, logOptions))
 	slog.SetDefault(logger)
 
-	token, err := getToken(useGitHubAuth)
+	token, err := getToken(*opts)
 	if err != nil {
 		slog.Debug("Failed to get token", "error", err)
 	}
@@ -63,8 +71,10 @@ func main() {
 	}
 }
 
-func getToken(useGitHubAuth bool) (token string, err error) {
-	if useGitHubAuth {
+func getToken(opts options) (token string, err error) {
+	if opts.token != "" {
+		token = opts.token
+	} else if opts.useGitHubAuth {
 		token, err = getTokenFromCLI()
 		if err != nil {
 			return "", fmt.Errorf("failed to get token from CLI: %w", err)
@@ -104,17 +114,16 @@ func createGitHubClient(token string) (*gitkit.GitHubClient, error) {
 	return gitkit.NewAuthenticatedGitHubClient(token), nil
 }
 
-func parseFlagsAndArgs() (bool, bool, []string) {
-	var ghAuth, debug bool
-
+func parseFlagsAndArgs(opts *options) []string {
 	flag.Usage = func() {
 		fmt.Fprintln(os.Stderr, usage)
 	}
 
 	help := flag.Bool("help", false, "")
 	flag.BoolVar(help, "h", false, "")
-	flag.BoolVar(&debug, "debug", false, "")
-	flag.BoolVar(&ghAuth, "gh-auth", false, "")
+	flag.BoolVar(&opts.debug, "debug", false, "")
+	flag.BoolVar(&opts.useGitHubAuth, "gh-auth", false, "")
+	flag.StringVar(&opts.token, "token", "", "")
 
 	flag.Parse()
 	args := flag.Args()
@@ -124,7 +133,7 @@ func parseFlagsAndArgs() (bool, bool, []string) {
 		os.Exit(0)
 	}
 
-	return ghAuth, debug, args
+	return args
 }
 
 func fetchRepositories(client *gitkit.GitHubClient, paths []string) error {

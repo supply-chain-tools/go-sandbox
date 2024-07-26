@@ -133,7 +133,7 @@ func (gc *GitHubClient) ListAllReposForUser(user string) ([]*github.Repository, 
 	return repos, nil
 }
 
-func (gc *GitHubClient) CloneOrFetchGitHubToPath(org string, repoName string, path string, depth int) error {
+func (gc *GitHubClient) CloneOrFetchGitHubToPath(org string, repoName string, path string, depth *int) error {
 	fmt.Printf("Cloning '%s/%s'\n", org, repoName)
 
 	var auth transport.AuthMethod = nil
@@ -144,15 +144,16 @@ func (gc *GitHubClient) CloneOrFetchGitHubToPath(org string, repoName string, pa
 		}
 	}
 
-	// Use max depth if zero. See https://git-scm.com/docs/shallow
-	if depth == 0 {
-		depth = 2147483647
+	// Use max depth if value is nil. See https://git-scm.com/docs/shallow
+	if depth == nil {
+		maxDepth := 2147483647
+		depth = &maxDepth
 	}
 
 	cloneOptions := &git.CloneOptions{
 		Auth:     auth,
 		URL:      "https://github.com/" + org + "/" + repoName,
-		Depth:    depth,
+		Depth:    *depth,
 		Progress: os.Stdout,
 	}
 
@@ -171,7 +172,7 @@ func (gc *GitHubClient) CloneOrFetchGitHubToPath(org string, repoName string, pa
 				Auth:       auth,
 				Progress:   os.Stdout,
 				Prune:      true,
-				Depth:      depth,
+				Depth:      *depth,
 			})
 			if err != nil && err.Error() != "already up-to-date" && err.Error() != "remote repository is empty" {
 				return fmt.Errorf("unable to fetch repo '%s': %w", path, err)
@@ -186,7 +187,7 @@ func (gc *GitHubClient) CloneOrFetchGitHubToPath(org string, repoName string, pa
 	return nil
 }
 
-func (gc *GitHubClient) CloneOrFetchAllRepos(owner string, repoName *string, localBasePath string, depth int) error {
+func (gc *GitHubClient) CloneOrFetchAllRepos(owner string, repoName *string, localBasePath string, depth *int) error {
 	orgInfo, isOrg, err := gc.GetGitHubOrganization(owner)
 	if err != nil {
 		return err

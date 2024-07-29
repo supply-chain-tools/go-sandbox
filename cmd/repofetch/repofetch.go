@@ -18,6 +18,7 @@ const usage = `Usage:
 Options:
   --token      GitHub token
   --gh-auth    Use GitHub CLI for authentication
+  --depth      Depth of clone/fetch
   --debug      Enable debug logging
   -h, --help   Display help
 
@@ -38,6 +39,7 @@ type options struct {
 	token         string
 	useGitHubAuth bool
 	debug         bool
+	depth         *int
 }
 
 func main() {
@@ -64,7 +66,7 @@ func main() {
 		slog.Debug("Failed to create GitHub client", "error", err)
 	}
 
-	if err := fetchRepositories(client, args); err != nil {
+	if err := fetchRepositories(client, args, opts.depth); err != nil {
 		slog.Debug("Failed to fetch repositories", "error", err)
 		os.Exit(1)
 	}
@@ -125,9 +127,14 @@ func parseArgsAndOptions() ([]string, options) {
 	flag.BoolVar(&opts.debug, "debug", false, "")
 	flag.BoolVar(&opts.useGitHubAuth, "gh-auth", false, "")
 	flag.StringVar(&opts.token, "token", "", "")
+	opts.depth = flag.Int("depth", -1, "")
 
 	flag.Parse()
 	args := flag.Args()
+
+	if *opts.depth == -1 { // no depth limit
+		opts.depth = nil
+	}
 
 	if *help || len(args) == 0 {
 		flag.Usage()
@@ -137,7 +144,7 @@ func parseArgsAndOptions() ([]string, options) {
 	return args, opts
 }
 
-func fetchRepositories(client *gitkit.GitHubClient, paths []string) error {
+func fetchRepositories(client *gitkit.GitHubClient, paths []string, depth *int) error {
 	dir, err := os.Getwd()
 	if err != nil {
 		return err
@@ -149,7 +156,7 @@ func fetchRepositories(client *gitkit.GitHubClient, paths []string) error {
 			return fmt.Errorf("failed to extract owner and repo name for path %s: %w", path, err)
 		}
 
-		if err := client.CloneOrFetchAllRepos(owner, repoName, dir, nil); err != nil {
+		if err := client.CloneOrFetchAllRepos(owner, repoName, dir, depth); err != nil {
 			return fmt.Errorf("failed to clone or fetch repos for %s/%s: %w", owner, *repoName, err)
 		}
 	}

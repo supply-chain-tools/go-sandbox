@@ -18,6 +18,7 @@ const usage = `Usage:
 Options:
   --token      GitHub token
   --gh-auth    Use GitHub CLI for authentication
+  --depth      Depth of clone/fetch
   --debug      Enable debug logging
   -h, --help   Display help
 
@@ -38,11 +39,11 @@ type options struct {
 	token         string
 	useGitHubAuth bool
 	debug         bool
+	depth         *int
 }
 
 func main() {
-	opts := &options{}
-	args := parseFlagsAndArgs(opts)
+	args, opts := parseArgsAndOptions()
 
 	logLevel := slog.LevelInfo
 	if opts.debug {
@@ -55,7 +56,7 @@ func main() {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, logOptions))
 	slog.SetDefault(logger)
 
-	token, err := getToken(*opts)
+	token, err := getToken(opts)
 	if err != nil {
 		slog.Debug("Failed to get token", "error", err)
 	}
@@ -65,7 +66,7 @@ func main() {
 		slog.Debug("Failed to create GitHub client", "error", err)
 	}
 
-	if err := fetchRepositories(client, args); err != nil {
+	if err := fetchRepositories(client, args, opts.depth); err != nil {
 		slog.Debug("Failed to fetch repositories", "error", err)
 		os.Exit(1)
 	}
@@ -114,29 +115,36 @@ func createGitHubClient(token string) (*gitkit.GitHubClient, error) {
 	return gitkit.NewAuthenticatedGitHubClient(token), nil
 }
 
-func parseFlagsAndArgs(opts *options) []string {
+func parseArgsAndOptions() ([]string, options) {
 	flag.Usage = func() {
 		fmt.Fprintln(os.Stderr, usage)
 	}
+
+	opts := options{}
 
 	help := flag.Bool("help", false, "")
 	flag.BoolVar(help, "h", false, "")
 	flag.BoolVar(&opts.debug, "debug", false, "")
 	flag.BoolVar(&opts.useGitHubAuth, "gh-auth", false, "")
 	flag.StringVar(&opts.token, "token", "", "")
+	opts.depth = flag.Int("depth", -1, "")
 
 	flag.Parse()
 	args := flag.Args()
+
+	if *opts.depth == -1 { // no depth limit
+		opts.depth = nil
+	}
 
 	if *help || len(args) == 0 {
 		flag.Usage()
 		os.Exit(0)
 	}
 
-	return args
+	return args, opts
 }
 
-func fetchRepositories(client *gitkit.GitHubClient, paths []string) error {
+func fetchRepositories(client *gitkit.GitHubClient, paths []string, depth *int) error {
 	dir, err := os.Getwd()
 	if err != nil {
 		return err
@@ -148,7 +156,7 @@ func fetchRepositories(client *gitkit.GitHubClient, paths []string) error {
 			return fmt.Errorf("failed to extract owner and repo name for path %s: %w", path, err)
 		}
 
-		if err := client.CloneOrFetchAllRepos(owner, repoName, dir, nil); err != nil {
+		if err := client.CloneOrFetchAllRepos(owner, repoName, dir, depth); err != nil {
 			return fmt.Errorf("failed to clone or fetch repos for %s/%s: %w", owner, *repoName, err)
 		}
 	}

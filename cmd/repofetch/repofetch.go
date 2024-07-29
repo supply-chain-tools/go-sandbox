@@ -41,8 +41,7 @@ type options struct {
 }
 
 func main() {
-	opts := &options{}
-	args := parseFlagsAndArgs(opts)
+	args, opts := parseArgsAndOptions()
 
 	logLevel := slog.LevelInfo
 	if opts.debug {
@@ -55,7 +54,7 @@ func main() {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, logOptions))
 	slog.SetDefault(logger)
 
-	token, err := getToken(*opts)
+	token, err := getToken(opts)
 	if err != nil {
 		slog.Debug("Failed to get token", "error", err)
 	}
@@ -114,10 +113,12 @@ func createGitHubClient(token string) (*gitkit.GitHubClient, error) {
 	return gitkit.NewAuthenticatedGitHubClient(token), nil
 }
 
-func parseFlagsAndArgs(opts *options) []string {
+func parseArgsAndOptions() ([]string, options) {
 	flag.Usage = func() {
 		fmt.Fprintln(os.Stderr, usage)
 	}
+
+	opts := options{}
 
 	help := flag.Bool("help", false, "")
 	flag.BoolVar(help, "h", false, "")
@@ -133,7 +134,7 @@ func parseFlagsAndArgs(opts *options) []string {
 		os.Exit(0)
 	}
 
-	return args
+	return args, opts
 }
 
 func fetchRepositories(client *gitkit.GitHubClient, paths []string) error {

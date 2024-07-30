@@ -37,13 +37,9 @@ func NewGitHubClient() *GitHubClient {
 }
 
 type CloneOptions struct {
-	Depth       *int
-	Concurrency *int
+	Depth       int
+	Concurrency int
 }
-
-const (
-	DefaultConcurrency = 1
-)
 
 func (gc *GitHubClient) GetGitHubOrganization(org string) (info *github.Organization, found bool, err error) {
 	result, res, err := gc.client.Organizations.Get(context.Background(), org)
@@ -158,6 +154,7 @@ func (gc *GitHubClient) CloneOrFetchGitHubToPath(org string, repoName string, pa
 		Auth:     auth,
 		URL:      "https://github.com/" + org + "/" + repoName,
 		Progress: os.Stdout,
+		Depth:    opts.Depth,
 	}
 
 	fetchOptions := &git.FetchOptions{
@@ -165,11 +162,7 @@ func (gc *GitHubClient) CloneOrFetchGitHubToPath(org string, repoName string, pa
 		Auth:       auth,
 		Progress:   os.Stdout,
 		Prune:      true,
-	}
-
-	if opts.Depth != nil {
-		cloneOptions.Depth = *opts.Depth
-		fetchOptions.Depth = *opts.Depth
+		Depth:      opts.Depth,
 	}
 
 	_, err := git.PlainClone(path, false, cloneOptions)
@@ -245,25 +238,17 @@ func (gc *GitHubClient) CloneOrFetchAllRepos(owner string, repoName *string, loc
 			}
 		}
 
-		// set default concurrency
-		if opts.Concurrency == nil {
-			defaultConcurrency := DefaultConcurrency
-			opts.Concurrency = &defaultConcurrency
-		}
-
 		logFields := []interface{}{
 			"owner", owner,
 			"ownerType", ownerType,
 			"numberOfRepos", len(allRepos),
-			"concurrency", *opts.Concurrency,
-		}
-		if opts.Depth != nil {
-			logFields = append(logFields, "depth", *opts.Depth)
+			"concurrency", opts.Concurrency,
+			"depth", opts.Depth,
 		}
 
 		slog.Debug("cloning/fetching", logFields...)
 
-		sem := make(chan struct{}, *opts.Concurrency)
+		sem := make(chan struct{}, opts.Concurrency)
 		var wg sync.WaitGroup
 
 		for _, r := range allRepos {

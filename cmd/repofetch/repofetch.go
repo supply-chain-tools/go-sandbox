@@ -150,8 +150,8 @@ func fetchRepositories(client *gitkit.GitHubClient, paths []string, opts options
 	}
 
 	cloneOpts := gitkit.CloneOptions{
-		Depth:       &opts.depth,
-		Concurrency: &opts.concurrency,
+		Depth:       opts.depth,
+		Concurrency: opts.concurrency,
 	}
 
 	for _, path := range paths {

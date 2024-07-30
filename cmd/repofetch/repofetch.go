@@ -20,6 +20,7 @@ Options:
   --token        Set GitHub token
   --depth        Set cloning/fetching depth
   --concurrency  Set number of concurrent fetches (default: 10)
+  --bare         Enable bare cloning
   --debug        Enable debug logging
   -h, --help     Display help
 
@@ -42,6 +43,7 @@ type options struct {
 	debug         bool
 	depth         int
 	concurrency   int
+	bare          bool
 }
 
 func main() {
@@ -128,6 +130,7 @@ func parseArgsAndOptions() ([]string, options) {
 	flag.BoolVar(help, "h", false, "")
 	flag.BoolVar(&opts.debug, "debug", false, "")
 	flag.BoolVar(&opts.useGitHubAuth, "gh-auth", false, "")
+	flag.BoolVar(&opts.bare, "bare", false, "")
 	flag.StringVar(&opts.token, "token", "", "")
 	flag.IntVar(&opts.concurrency, "concurrency", 10, "")
 	flag.IntVar(&opts.depth, "depth", 0, "")
@@ -152,6 +155,7 @@ func fetchRepositories(client *gitkit.GitHubClient, paths []string, opts options
 	cloneOpts := gitkit.CloneOptions{
 		Depth:       opts.depth,
 		Concurrency: opts.concurrency,
+		Bare:        opts.bare,
 	}
 
 	for _, path := range paths {

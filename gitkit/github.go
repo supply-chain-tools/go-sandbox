@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 )
 
 type GitHubClient struct {
@@ -33,6 +34,11 @@ func NewGitHubClient() *GitHubClient {
 		client: client,
 		token:  nil,
 	}
+}
+
+type CloneOptions struct {
+	Depth       int
+	Concurrency int
 }
 
 func (gc *GitHubClient) GetGitHubOrganization(org string) (info *github.Organization, found bool, err error) {
@@ -133,7 +139,7 @@ func (gc *GitHubClient) ListAllReposForUser(user string) ([]*github.Repository, 
 	return repos, nil
 }
 
-func (gc *GitHubClient) CloneOrFetchGitHubToPath(org string, repoName string, path string, depth *int) error {
+func (gc *GitHubClient) CloneOrFetchGitHubToPath(org string, repoName string, path string, opts *CloneOptions) error {
 	fmt.Printf("Cloning '%s/%s'\n", org, repoName)
 
 	var auth transport.AuthMethod = nil
@@ -144,17 +150,19 @@ func (gc *GitHubClient) CloneOrFetchGitHubToPath(org string, repoName string, pa
 		}
 	}
 
-	// Use max depth if value is nil. See https://git-scm.com/docs/shallow
-	if depth == nil {
-		maxDepth := 2147483647
-		depth = &maxDepth
-	}
-
 	cloneOptions := &git.CloneOptions{
 		Auth:     auth,
 		URL:      "https://github.com/" + org + "/" + repoName,
-		Depth:    *depth,
 		Progress: os.Stdout,
+		Depth:    opts.Depth,
+	}
+
+	fetchOptions := &git.FetchOptions{
+		RemoteName: "origin",
+		Auth:       auth,
+		Progress:   os.Stdout,
+		Prune:      true,
+		Depth:      opts.Depth,
 	}
 
 	_, err := git.PlainClone(path, false, cloneOptions)
@@ -167,13 +175,7 @@ func (gc *GitHubClient) CloneOrFetchGitHubToPath(org string, repoName string, pa
 				return fmt.Errorf("unable to open git repository '%s': %w", path, err)
 			}
 
-			err = repo.Fetch(&git.FetchOptions{
-				RemoteName: "origin",
-				Auth:       auth,
-				Progress:   os.Stdout,
-				Prune:      true,
-				Depth:      *depth,
-			})
+			err = repo.Fetch(fetchOptions)
 			if err != nil && err.Error() != "already up-to-date" && err.Error() != "remote repository is empty" {
 				return fmt.Errorf("unable to fetch repo '%s': %w", path, err)
 			}
@@ -187,7 +189,7 @@ func (gc *GitHubClient) CloneOrFetchGitHubToPath(org string, repoName string, pa
 	return nil
 }
 
-func (gc *GitHubClient) CloneOrFetchAllRepos(owner string, repoName *string, localBasePath string, depth *int) error {
+func (gc *GitHubClient) CloneOrFetchAllRepos(owner string, repoName *string, localBasePath string, opts CloneOptions) error {
 	orgInfo, isOrg, err := gc.GetGitHubOrganization(owner)
 	if err != nil {
 		return err
@@ -236,18 +238,39 @@ func (gc *GitHubClient) CloneOrFetchAllRepos(owner string, repoName *string, loc
 			}
 		}
 
-		slog.Debug("cloning/fetching",
+		logFields := []interface{}{
 			"owner", owner,
 			"ownerType", ownerType,
-			"numberOfRepos", len(allRepos))
+			"numberOfRepos", len(allRepos),
+			"concurrency", opts.Concurrency,
+			"depth", opts.Depth,
+		}
+
+		slog.Debug("cloning/fetching", logFields...)
+
+		sem := make(chan struct{}, opts.Concurrency)
+		var wg sync.WaitGroup
 
 		for _, r := range allRepos {
-			repoPath := filepath.Join(ownerPath, r.GetName())
-			err = gc.CloneOrFetchGitHubToPath(owner, r.GetName(), repoPath, depth)
-			if err != nil {
-				return err
-			}
+			wg.Add(1)
+			sem <- struct{}{}
+
+			go func(repo *github.Repository) {
+				defer wg.Done()
+				defer func() { <-sem }()
+
+				fmt.Println("Cloning", repo.GetName())
+
+				repoPath := filepath.Join(ownerPath, repo.GetName())
+				err := gc.CloneOrFetchGitHubToPath(owner, repo.GetName(), repoPath, &opts)
+				if err != nil {
+					log.Printf("Error cloning repo %s/%s: %v", owner, repo.GetName(), err)
+				}
+			}(r)
 		}
+
+		wg.Wait()
+
 	} else {
 		if *repoName == "" {
 			return fmt.Errorf("repo name must not be empty string")
@@ -280,7 +303,7 @@ func (gc *GitHubClient) CloneOrFetchAllRepos(owner string, repoName *string, loc
 			"repoName", repoName)
 
 		repoPath := filepath.Join(ownerPath, *repoName)
-		err = gc.CloneOrFetchGitHubToPath(owner, *repoName, repoPath, depth)
+		err = gc.CloneOrFetchGitHubToPath(owner, *repoName, repoPath, &opts)
 		if err != nil {
 			return err
 		}

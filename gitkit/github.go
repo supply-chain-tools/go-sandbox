@@ -39,6 +39,7 @@ func NewGitHubClient() *GitHubClient {
 type CloneOptions struct {
 	Depth       int
 	Concurrency int
+	Bare        bool
 }
 
 func (gc *GitHubClient) GetGitHubOrganization(org string) (info *github.Organization, found bool, err error) {
@@ -165,7 +166,13 @@ func (gc *GitHubClient) CloneOrFetchGitHubToPath(org string, repoName string, pa
 		Depth:      opts.Depth,
 	}
 
-	_, err := git.PlainClone(path, false, cloneOptions)
+	var err error
+	if opts.Bare {
+		_, err = git.PlainClone(path+".git", true, cloneOptions)
+	} else {
+		_, err = git.PlainClone(path, false, cloneOptions)
+	}
+
 	if err != nil {
 		errorString := err.Error()
 		if errorString == "repository already exists" {
@@ -244,6 +251,10 @@ func (gc *GitHubClient) CloneOrFetchAllRepos(owner string, repoName *string, loc
 			"numberOfRepos", len(allRepos),
 			"concurrency", opts.Concurrency,
 			"depth", opts.Depth,
+		}
+
+		if opts.Bare {
+			logFields = append(logFields, "bare", true)
 		}
 
 		slog.Debug("cloning/fetching", logFields...)

@@ -155,7 +155,7 @@ func ProcessAllCommits[T SearchResult](path string,
 
 	if mode == ModeAllHistory {
 		danglingCommits := make([]*plumbing.Hash, 0)
-		for commitHash := range repoState.commitMap {
+		for commitHash := range repoState.CommitMap {
 			_, found := processedState.commitResults[commitHash]
 			if !found {
 				danglingCommits = append(danglingCommits, &commitHash)
@@ -259,7 +259,7 @@ func processCommitRecursively[T SearchResult](path string, commitHash *plumbing.
 		return
 	}
 
-	commit, found := repoState.commitMap[hash]
+	commit, found := repoState.CommitMap[hash]
 	if !found {
 		log.Fatalf("did not find commit '%s' for repo '%s'", hash, path)
 	}
@@ -332,7 +332,7 @@ func processCommit[T SearchResult](commit *object.Commit,
 			commitResultsMap[r] = element
 		}
 
-		tags, tagsForCommit := repoState.targetToTagMap[commit.Hash]
+		tags, tagsForCommit := repoState.TargetToTagMap[commit.Hash]
 		if tagsForCommit {
 			_, haveTagResults := processedState.tagResults[r]
 			if !haveTagResults {
@@ -362,7 +362,7 @@ func processTreeRecursively[T SearchResult](commit *object.Commit,
 		return existingTreeResults
 	}
 
-	tree, found := repoState.treeMap[treeHash]
+	tree, found := repoState.TreeMap[treeHash]
 	if !found {
 		log.Fatalf("did not find tree hash '%s'", treeHash)
 	}
@@ -383,7 +383,7 @@ func processTreeRecursively[T SearchResult](commit *object.Commit,
 
 			var dataTime int64 = 0
 			dataLoader := func() []byte {
-				blob, blobFound := repoState.blobMap[entry.Hash]
+				blob, blobFound := repoState.BlobMap[entry.Hash]
 				if !blobFound {
 					log.Fatalf("could not find blob '%s'\n", entry.Hash)
 				}
@@ -474,28 +474,28 @@ func LoadRepoState(repo *git.Repository) *RepoState {
 			if err != nil {
 				log.Fatal(err)
 			}
-			repoState.blobMap[obj.Hash()] = blob
+			repoState.BlobMap[obj.Hash()] = blob
 		case plumbing.TreeObject:
 			tree := &object.Tree{}
 			err := tree.Decode(obj)
 			if err != nil {
 				log.Fatal(err)
 			}
-			repoState.treeMap[obj.Hash()] = tree
+			repoState.TreeMap[obj.Hash()] = tree
 		case plumbing.CommitObject:
 			commit := &object.Commit{}
 			err := commit.Decode(obj)
 			if err != nil {
 				log.Fatal(err)
 			}
-			repoState.commitMap[obj.Hash()] = commit
+			repoState.CommitMap[obj.Hash()] = commit
 		case plumbing.TagObject:
 			tag := &object.Tag{}
 			err := tag.Decode(obj)
 			if err != nil {
 				log.Fatal(err)
 			}
-			repoState.tagMap[obj.Hash()] = tag
+			repoState.TagMap[obj.Hash()] = tag
 		default:
 			log.Fatal("unknown object type")
 		}
@@ -509,12 +509,12 @@ func LoadRepoState(repo *git.Repository) *RepoState {
 		log.Fatal(err)
 	}
 
-	for _, v := range repoState.tagMap {
-		existing, found := repoState.targetToTagMap[v.Target]
+	for _, v := range repoState.TagMap {
+		existing, found := repoState.TargetToTagMap[v.Target]
 		if found {
-			repoState.targetToTagMap[v.Target] = append(existing, v)
+			repoState.TargetToTagMap[v.Target] = append(existing, v)
 		} else {
-			repoState.targetToTagMap[v.Target] = []*object.Tag{v}
+			repoState.TargetToTagMap[v.Target] = []*object.Tag{v}
 		}
 	}
 
@@ -522,15 +522,11 @@ func LoadRepoState(repo *git.Repository) *RepoState {
 }
 
 type RepoState struct {
-	blobMap        map[plumbing.Hash]*object.Blob
-	treeMap        map[plumbing.Hash]*object.Tree
-	commitMap      map[plumbing.Hash]*object.Commit
-	tagMap         map[plumbing.Hash]*object.Tag
-	targetToTagMap map[plumbing.Hash][]*object.Tag
-}
-
-func (rs *RepoState) GetCommitMap() map[plumbing.Hash]*object.Commit {
-	return rs.commitMap
+	BlobMap        map[plumbing.Hash]*object.Blob
+	TreeMap        map[plumbing.Hash]*object.Tree
+	CommitMap      map[plumbing.Hash]*object.Commit
+	TagMap         map[plumbing.Hash]*object.Tag
+	TargetToTagMap map[plumbing.Hash][]*object.Tag
 }
 
 func newRepoState() *RepoState {
@@ -541,11 +537,11 @@ func newRepoState() *RepoState {
 	targetToTagMap := make(map[plumbing.Hash][]*object.Tag)
 
 	return &RepoState{
-		blobMap:        blobMap,
-		treeMap:        treeMap,
-		commitMap:      commitMap,
-		tagMap:         tagMap,
-		targetToTagMap: targetToTagMap,
+		BlobMap:        blobMap,
+		TreeMap:        treeMap,
+		CommitMap:      commitMap,
+		TagMap:         tagMap,
+		TargetToTagMap: targetToTagMap,
 	}
 }
 

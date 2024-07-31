@@ -330,7 +330,7 @@ func ExtractOwnerAndRepoName(input string) (owner string, repoName *string, err 
 	} else if strings.HasPrefix(input, githubPrefix) {
 		userOrOrg = strings.TrimPrefix(input, githubPrefix)
 	} else {
-		return "", nil, fmt.Errorf("invalid target '%s'; must be prefixed with 'github.com/'", userOrOrg)
+		return "", nil, fmt.Errorf("invalid target '%s'; must start with '%s' or '%s", userOrOrg, httpsGithubPrefix, githubPrefix)
 	}
 
 	userOrOrg = strings.Trim(userOrOrg, "/")

@@ -8,6 +8,7 @@ stuff and breaking changes are to be expected.**
 CLIs
  - [cmd/gitsearch](cmd/gitsearch) - a multi-string, multi-git-repo, all history, exact/fuzzy searcher.
  - [cmd/repofetch](cmd/repofetch) - fetch all repos for a GitHub user or org
+ - [cmd/githash](cmd/githash) - compute git hashes with alternative hash functions
  
 Libraries
  - [search](search) - the Trie based search that powers `gitsearch`
@@ -15,7 +16,7 @@ Libraries
  - [gitsearch](gitsearch) - ties together `gitkit` and `search`
  - [iana](iana) - used to get TLDs for typosquatting
  - [hashset](hashset) - hashsets are used a lot in the code and not part of the Go standard library
-
+ - [githash](githash) - compute git hashes with alternative hash functions
 
 ## Getting started
 

@@ -59,7 +59,7 @@ func (gh *gitHash) CommitSum(commitHash plumbing.Hash) ([]byte, error) {
 		return nil, fmt.Errorf("commit %s not found", commitHash)
 	}
 
-	content, err := gh.commitContent(commit, true)
+	content, err := gh.commitContent(commit)
 	if err != nil {
 		return nil, err
 	}
@@ -70,7 +70,7 @@ func (gh *gitHash) CommitSum(commitHash plumbing.Hash) ([]byte, error) {
 	return h, nil
 }
 
-func (gh *gitHash) commitContent(commit *object.Commit, includeSignature bool) (string, error) {
+func (gh *gitHash) commitContent(commit *object.Commit) (string, error) {
 	sb := strings.Builder{}
 
 	treeHash, found := gh.treeMap[commit.TreeHash]
@@ -100,10 +100,15 @@ func (gh *gitHash) commitContent(commit *object.Commit, includeSignature bool) (
 	sb.WriteString(fmt.Sprintf("author %s <%s> %d %s\n", commit.Author.Name, commit.Author.Email, commit.Author.When.Unix(), commit.Author.When.Format("-0700")))
 	sb.WriteString(fmt.Sprintf("committer %s <%s> %d %s\n", commit.Committer.Name, commit.Committer.Email, commit.Committer.When.Unix(), commit.Committer.When.Format("-0700")))
 
-	if includeSignature {
-		sb.WriteString(gpgSigString(commit))
+	if commit.PGPSignature != "" {
+		gpgContent, err := gpgSigString(commit)
+		if err != nil {
+			return "", err
+		}
+		sb.WriteString(gpgContent)
 	}
 
+	sb.WriteString("\n")
 	sb.WriteString(commit.Message)
 
 	result := sb.String()
@@ -111,7 +116,7 @@ func (gh *gitHash) commitContent(commit *object.Commit, includeSignature bool) (
 	return result, nil
 }
 
-func gpgSigString(commit *object.Commit) string {
+func gpgSigString(commit *object.Commit) (string, error) {
 	sb := strings.Builder{}
 	sb.WriteString("gpgsig")
 
@@ -123,10 +128,13 @@ func gpgSigString(commit *object.Commit) string {
 		sb.WriteString("\n")
 	}
 
-	sb.WriteString("\n")
+	if parts[len(parts)-1] != "" {
+		return "", fmt.Errorf("expected empty last line of signature, got '%s'", parts[len(parts)-1])
+	}
+
 	s := sb.String()
 
-	return s
+	return s, nil
 }
 
 func (gh *gitHash) TreeSum(treeHash plumbing.Hash) ([]byte, error) {

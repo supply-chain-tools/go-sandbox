@@ -15,7 +15,6 @@ import (
 	"golang.org/x/crypto/blake2b"
 	"golang.org/x/crypto/sha3"
 	"hash"
-	"log"
 	"log/slog"
 	"os"
 )
@@ -24,25 +23,31 @@ const usage = `Usage:
     githash [options] <commit>
 
 Options:
-    -a             Algorithm: sha1, sha256 (default), sha512, sha3-256, sha3-512, blake2b
-    -t             Type: commit (default), hash, blob
-    --debug        Enable debug logging
-    -h, --help     Show help message`
+    -a, --algorithm    Algorithm: sha1, sha256 (default), sha512, sha3-256, sha3-512, blake2b
+    -o, --object-type  Object type: commit (default), hash, blob
+    --debug            Enable debug logging
+    -h, --help         Show help message`
 
 func main() {
-	algorithm, objectType, targetHash := processOptionsAndArgs()
+	algorithm, objectType, targetHash, err := processOptionsAndArgs()
+	if err != nil {
+		print("Failed to process command line options and arguments: ", err.Error(), "\n")
+		os.Exit(1)
+	}
 
 	repo, err := loadRepoFromCwd()
 	if err != nil {
-		log.Fatal(err)
+		print("Failed to load repository: ", err.Error(), "\n")
+		os.Exit(1)
 	}
 
 	if targetHash == nil {
 		head, err := repo.Head()
-		slog.Debug("getting commit from HEAD")
 		if err != nil {
-			log.Fatal(err)
+			print("Failed to get HEAD commit: ", err.Error(), "\n")
+			os.Exit(1)
 		}
+		slog.Debug("getting commit from HEAD")
 		h := plumbing.NewHash(head.Hash().String())
 		targetHash = &h
 	}
@@ -50,35 +55,63 @@ func main() {
 	slog.Debug("running githash",
 		"targetHash", hex.EncodeToString((*targetHash)[:]))
 
-	verifyTargetHashOrExit(repo, targetHash, objectType)
+	err = verifyTargetHashOrExit(repo, targetHash, objectType)
+	if err != nil {
+		print("Failed to run integrity check: ", err.Error(), "\n")
+		os.Exit(1)
+	}
 
 	gitHash := githash.NewGitHash(repo, algorithm)
 	result, err := hashSum(gitHash, targetHash, objectType)
 	if err != nil {
-		log.Fatal(err)
+		print("Failed to get hash sum: ", err.Error(), "\n")
+		os.Exit(1)
 	}
 
 	fmt.Println(hex.EncodeToString(result))
 }
 
-func processOptionsAndArgs() (algorithm hash.Hash, objectType githash.ObjectType, targetHash *plumbing.Hash) {
+func processOptionsAndArgs() (algorithm hash.Hash, objectType githash.ObjectType, targetHash *plumbing.Hash, err error) {
 	flag.Usage = func() {
 		fmt.Println(usage)
 	}
 
 	flags := flag.NewFlagSet("all", flag.ExitOnError)
 	var help, h, debugMode bool
-	var algorithmString, typeString string
-	flags.StringVar(&algorithmString, "a", "sha256", "")
-	flags.StringVar(&typeString, "t", "commit", "")
+	var algorithmString, algorithmStringShort, typeString, typeStringShort string
+
+	const (
+		defaultAlgorithm = "sha256"
+		defaultType      = "commit"
+	)
+
+	flags.StringVar(&algorithmString, "algorithm", defaultAlgorithm, "")
+	flags.StringVar(&algorithmStringShort, "a", defaultAlgorithm, "")
+	flags.StringVar(&typeString, "object-type", defaultType, "")
+	flags.StringVar(&typeStringShort, "o", defaultType, "")
 	flags.BoolVar(&help, "help", false, "")
 	flags.BoolVar(&h, "h", false, "")
 	flags.BoolVar(&debugMode, "debug", false, "")
 
-	err := flags.Parse(os.Args[1:])
+	err = flags.Parse(os.Args[1:])
 	if err != nil || help || h {
-		fmt.Println(usage)
-		os.Exit(1)
+		return nil, "", nil, fmt.Errorf("failed to parse flags: %w", err)
+	}
+
+	if algorithmString != defaultAlgorithm && algorithmStringShort != defaultAlgorithm {
+		return nil, "", nil, fmt.Errorf("both --algorithm and -a set, pick one")
+	}
+
+	if algorithmStringShort != defaultAlgorithm {
+		algorithmString = algorithmStringShort
+	}
+
+	if typeString != defaultType && typeStringShort != defaultType {
+		return nil, "", nil, fmt.Errorf("both --object-type and -o set, pick one")
+	}
+
+	if typeStringShort != defaultType {
+		typeString = typeStringShort
 	}
 
 	opts := &slog.HandlerOptions{
@@ -106,11 +139,10 @@ func processOptionsAndArgs() (algorithm hash.Hash, objectType githash.ObjectType
 	case "blake2b":
 		algorithm, err = blake2b.New(64, nil)
 		if err != nil {
-			log.Fatal(err)
+			return nil, "", nil, fmt.Errorf("failed to initialize blake2b: %w", err)
 		}
 	default:
-		fmt.Printf("Unsupported hash algorithm: %s\n", algorithmString)
-		os.Exit(1)
+		return nil, "", nil, fmt.Errorf("unsupported hash algorithm: %s", algorithmString)
 	}
 
 	switch typeString {
@@ -121,27 +153,24 @@ func processOptionsAndArgs() (algorithm hash.Hash, objectType githash.ObjectType
 	case "blob":
 		objectType = githash.BlobObject
 	default:
-		fmt.Printf("Unsupported type: %s\n", typeString)
-		os.Exit(1)
+		return nil, "", nil, fmt.Errorf("unsupported object type: %s", typeString)
 	}
 
 	if len(flags.Args()) > 1 {
-		fmt.Printf("Only one argument expected\n")
-		os.Exit(1)
+		return nil, "", nil, fmt.Errorf("only one argument expected, got %d", len(flags.Args()))
 	}
 
 	if len(flags.Args()) == 1 {
 		hashCandidate := flags.Args()[0]
 		if len(hashCandidate) != 40 {
-			fmt.Printf("Hash must be 40 characters: got %d\n", len(hashCandidate))
-			os.Exit(1)
+			return nil, "", nil, fmt.Errorf("hash must be 40 characters: got %d\n", len(hashCandidate))
 		}
 
 		h := plumbing.NewHash(hashCandidate)
 		targetHash = &h
 	}
 
-	return algorithm, objectType, targetHash
+	return algorithm, objectType, targetHash, nil
 }
 
 func loadRepoFromCwd() (*git.Repository, error) {
@@ -181,16 +210,17 @@ func hashSum(gitHash githash.GitHash, targetHash *plumbing.Hash, objectType gith
 
 // verifyOrExit verifies that the computed sha1 matches the target hash.
 // When testing has been improved this can be removed.
-func verifyTargetHashOrExit(repo *git.Repository, targetHash *plumbing.Hash, objectType githash.ObjectType) {
+func verifyTargetHashOrExit(repo *git.Repository, targetHash *plumbing.Hash, objectType githash.ObjectType) error {
 	verificationGitHash := githash.NewGitHash(repo, sha1.New())
 
 	verificationHash, err := hashSum(verificationGitHash, targetHash, objectType)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 
 	if !bytes.Equal(verificationHash, (*targetHash)[:]) {
-		fmt.Printf("Internal error: verification hash %s does not match target hash %s\n", hex.EncodeToString(verificationHash), hex.EncodeToString((*targetHash)[:]))
-		os.Exit(1)
+		return fmt.Errorf("internal error: verification hash %s does not match target hash %s\n", hex.EncodeToString(verificationHash), hex.EncodeToString((*targetHash)[:]))
 	}
+
+	return nil
 }

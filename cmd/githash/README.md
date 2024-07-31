@@ -10,7 +10,7 @@ githash <commit>
 
 Get the `blake2b` (or: `sha512`, `sha3-256`, `sha3-512`, `blake2b`, `sha1`)
 ```
-githash -a blake2b <commit>
+githash --algorithm blake2b <commit>
 ```
 
 Get the `sha256` of `HEAD`
@@ -20,10 +20,10 @@ githash
 
 Get the `sha256` of a tree
 ```
-githash -t tree <commit>
+githash --object-type tree <commit>
 ```
 
-Get the `sha256` of an object
+Get the `sha256` of a blob
 ```
-githash -t object <commit>
+githash --object-type blob <commit>
 ```

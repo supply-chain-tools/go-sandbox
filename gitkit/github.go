@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -230,10 +231,9 @@ func (gc *GitHubClient) CloneOrFetchRepo(repoURL string, localBasePath string, o
 	var result CloneResult
 	var progress io.Writer
 
-	// set writer and discard if nil
+	// set default writer
 	if opts.Progress == nil {
-		discard := io.Discard
-		progress = discard
+		progress = os.Stdout
 	} else {
 		progress = *opts.Progress
 	}

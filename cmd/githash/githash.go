@@ -24,7 +24,7 @@ const usage = `Usage:
 
 Options:
     -a, --algorithm    Algorithm: sha1, sha256 (default), sha512, sha3-256, sha3-512, blake2b
-    -o, --object-type  Object type: commit (default), hash, blob
+    -o, --object-type  Object type: commit (default), hash, blob, tag
     --debug            Enable debug logging
     -h, --help         Show help message`
 
@@ -152,6 +152,8 @@ func processOptionsAndArgs() (algorithm hash.Hash, objectType githash.ObjectType
 		objectType = githash.TreeObject
 	case "blob":
 		objectType = githash.BlobObject
+	case "tag":
+		objectType = githash.TagObject
 	default:
 		return nil, "", nil, fmt.Errorf("unsupported object type: %s", typeString)
 	}
@@ -203,6 +205,8 @@ func hashSum(gitHash githash.GitHash, targetHash *plumbing.Hash, objectType gith
 		result, err = gitHash.TreeSum(*targetHash)
 	case githash.BlobObject:
 		result, err = gitHash.BlobSum(*targetHash)
+	case githash.TagObject:
+		result, err = gitHash.TagSum(*targetHash)
 	}
 
 	return result, err

@@ -19,12 +19,14 @@ var (
 	CommitObject ObjectType = "commit"
 	TreeObject   ObjectType = "tree"
 	BlobObject   ObjectType = "blob"
+	TagObject    ObjectType = "tag"
 )
 
 type GitHash interface {
 	CommitSum(commitHash plumbing.Hash) ([]byte, error)
 	TreeSum(treeHash plumbing.Hash) ([]byte, error)
 	BlobSum(blobHash plumbing.Hash) ([]byte, error)
+	TagSum(tagHash plumbing.Hash) ([]byte, error)
 }
 
 type gitHash struct {
@@ -34,6 +36,7 @@ type gitHash struct {
 	commitMap map[plumbing.Hash][]byte
 	treeMap   map[plumbing.Hash][]byte
 	blobMap   map[plumbing.Hash][]byte
+	tagMap    map[plumbing.Hash][]byte
 }
 
 func NewGitHash(repo *git.Repository, hash hash.Hash) GitHash {
@@ -45,6 +48,7 @@ func NewGitHash(repo *git.Repository, hash hash.Hash) GitHash {
 		commitMap: make(map[plumbing.Hash][]byte),
 		treeMap:   make(map[plumbing.Hash][]byte),
 		blobMap:   make(map[plumbing.Hash][]byte),
+		tagMap:    make(map[plumbing.Hash][]byte),
 	}
 }
 
@@ -135,6 +139,54 @@ func gpgSigString(commit *object.Commit) (string, error) {
 	s := sb.String()
 
 	return s, nil
+}
+
+func (gh *gitHash) TagSum(tagHash plumbing.Hash) ([]byte, error) {
+	h, found := gh.tagMap[tagHash]
+	if found {
+		return h, nil
+	}
+
+	tag, found := gh.repoState.TagMap[tagHash]
+	if !found {
+		return nil, fmt.Errorf("tag %s not found", tagHash)
+	}
+
+	content, err := gh.tagContent(tag)
+	if err != nil {
+		return nil, err
+	}
+
+	h = objectHash([]byte(content), TagObject, gh.hash)
+	gh.tagMap[tagHash] = h
+
+	return h, nil
+}
+
+func (gh *gitHash) tagContent(tag *object.Tag) (string, error) {
+	sb := strings.Builder{}
+
+	targetHash, found := gh.commitMap[tag.Target]
+	if !found {
+		h, err := gh.CommitSum(tag.Target)
+		if err != nil {
+			return "", err
+		}
+		targetHash = h
+	}
+	sb.WriteString("object " + hex.EncodeToString(targetHash) + "\n")
+	sb.WriteString("type commit\n")
+	sb.WriteString("tag " + tag.Name + "\n")
+	sb.WriteString(fmt.Sprintf("tagger %s <%s> %d %s\n", tag.Tagger.Name, tag.Tagger.Email, tag.Tagger.When.Unix(), tag.Tagger.When.Format("-0700")))
+
+	sb.WriteString("\n")
+	sb.WriteString(tag.Message)
+
+	if tag.PGPSignature != "" {
+		sb.WriteString(tag.PGPSignature)
+	}
+
+	return sb.String(), nil
 }
 
 func (gh *gitHash) TreeSum(treeHash plumbing.Hash) ([]byte, error) {

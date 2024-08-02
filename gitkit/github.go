@@ -149,23 +149,19 @@ func (gc *GitHubClient) ListAllReposForUser(user string) ([]*github.Repository, 
 }
 
 func (gc *GitHubClient) GetRepositories(url string) ([]string, error) {
-	// remove .git suffix if present
 	url = strings.TrimSuffix(url, ".git")
 
-	// owner and repo
 	owner, repoName, err := ExtractOwnerAndRepoName(url)
 	if err != nil {
 		return nil, fmt.Errorf("invalid URL '%s': %w", url, err)
 	}
 
-	// org
 	orgInfo, res, err := gc.client.Organizations.Get(context.Background(), owner)
 	isOrg := res != nil && res.StatusCode == 200
 	if err != nil && (res == nil || res.StatusCode != 404) {
 		return nil, fmt.Errorf("error fetching organization info: %w", err)
 	}
 
-	// user
 	userInfo, res, err := gc.client.Users.Get(context.Background(), owner)
 	isUser := res != nil && res.StatusCode == 200
 	if err != nil && (res == nil || res.StatusCode != 404) {
@@ -176,7 +172,6 @@ func (gc *GitHubClient) GetRepositories(url string) ([]string, error) {
 		return nil, fmt.Errorf("no user or organization named '%s'", owner)
 	}
 
-	// owner is same as actual owner
 	if isOrg {
 		if strings.ToLower(owner) != strings.ToLower(*orgInfo.Login) {
 			return nil, fmt.Errorf("actual '%s' and requested '%s' org differ in more than casing", *orgInfo.Login, owner)
@@ -231,25 +226,21 @@ func (gc *GitHubClient) CloneOrFetchRepo(repoURL string, localBasePath string, o
 	var result CloneResult
 	var progress io.Writer
 
-	// set default writer
 	if opts.Progress == nil {
-		progress = os.Stdout
+		progress = os.Stdout // default to stdout
 	} else {
 		progress = *opts.Progress
 	}
 
-	// ensure scheme
 	if !strings.HasPrefix(repoURL, "https://") && !strings.HasPrefix(repoURL, "http://") {
 		repoURL = "https://" + repoURL
 	}
 
-	// get owner and repo
 	owner, repoName, err := ExtractOwnerAndRepoName(repoURL)
 	if err != nil {
 		return result, fmt.Errorf("invalid URL '%s': %w", repoURL, err)
 	}
 
-	// create owner directory
 	repoPath := filepath.Join(localBasePath, owner, *repoName)
 	result = CloneResult{
 		RepoName:  *repoName,

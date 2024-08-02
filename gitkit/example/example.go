@@ -31,7 +31,7 @@ func main() {
 	cloneOpts := gitkit.CloneOptions{
 		// Depth:    1,
 		Bare:     false,
-		Progress: &progressWriter,
+		Progress: progressWriter,
 	}
 
 	// monitor output buffer and print updates
@@ -60,7 +60,7 @@ func main() {
 
 		for _, repoURL := range repos {
 			fmt.Printf("Cloning repository: %s\n", repoURL)
-			result, err := client.CloneOrFetchRepo(repoURL, dir, cloneOpts)
+			result, err := client.CloneOrFetchRepo(repoURL, dir, &cloneOpts)
 			if err != nil {
 				fmt.Printf("Error cloning repository %s: %v\n", repoURL, err)
 			} else {

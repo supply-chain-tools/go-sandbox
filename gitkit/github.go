@@ -47,7 +47,13 @@ type CloneResult struct {
 type CloneOptions struct {
 	Depth    int
 	Bare     bool
-	Progress *io.Writer
+	Progress io.Writer
+}
+
+func DefaultCloneOptions() *CloneOptions {
+	return &CloneOptions{
+		Progress: os.Stdout,
+	}
 }
 
 func (gc *GitHubClient) GetGitHubOrganization(org string) (info *github.Organization, found bool, err error) {
@@ -222,14 +228,11 @@ func (gc *GitHubClient) GetRepositories(url string) ([]string, error) {
 	return repoURLs, nil
 }
 
-func (gc *GitHubClient) CloneOrFetchRepo(repoURL string, localBasePath string, opts CloneOptions) (CloneResult, error) {
+func (gc *GitHubClient) CloneOrFetchRepo(repoURL string, localBasePath string, opts *CloneOptions) (*CloneResult, error) {
 	var result CloneResult
-	var progress io.Writer
 
-	if opts.Progress == nil {
-		progress = os.Stdout // default to stdout
-	} else {
-		progress = *opts.Progress
+	if opts == nil {
+		opts = DefaultCloneOptions()
 	}
 
 	if !strings.HasPrefix(repoURL, "https://") && !strings.HasPrefix(repoURL, "http://") {
@@ -238,7 +241,7 @@ func (gc *GitHubClient) CloneOrFetchRepo(repoURL string, localBasePath string, o
 
 	owner, repoName, err := ExtractOwnerAndRepoName(repoURL)
 	if err != nil {
-		return result, fmt.Errorf("invalid URL '%s': %w", repoURL, err)
+		return &result, fmt.Errorf("invalid URL '%s': %w", repoURL, err)
 	}
 
 	repoPath := filepath.Join(localBasePath, owner, *repoName)
@@ -248,7 +251,7 @@ func (gc *GitHubClient) CloneOrFetchRepo(repoURL string, localBasePath string, o
 		LocalPath: repoPath,
 	}
 
-	fmt.Fprintf(progress, "Cloning '%s/%s' into '%s'\n", owner, *repoName, repoPath)
+	fmt.Fprintf(opts.Progress, "Cloning '%s/%s' into '%s'\n", owner, *repoName, repoPath)
 
 	var auth transport.AuthMethod = nil
 	if gc.token != nil {
@@ -261,28 +264,28 @@ func (gc *GitHubClient) CloneOrFetchRepo(repoURL string, localBasePath string, o
 	cloneOptions := &git.CloneOptions{
 		Auth:     auth,
 		URL:      repoURL,
-		Progress: *opts.Progress,
+		Progress: opts.Progress,
 		Depth:    opts.Depth,
 	}
 
 	fetchOptions := &git.FetchOptions{
 		RemoteName: "origin",
 		Auth:       auth,
-		Progress:   *opts.Progress,
+		Progress:   opts.Progress,
 		Prune:      true,
 		Depth:      opts.Depth,
 	}
 
 	repo, err := git.PlainOpen(repoPath)
 	if err == nil { // repo exists, fetch updates
-		fmt.Fprintf(progress, "Repository '%s/%s' exists. Fetching updates...\n", owner, *repoName)
+		fmt.Fprintf(opts.Progress, "Repository '%s/%s' exists. Fetching updates...\n", owner, *repoName)
 
 		err = repo.Fetch(fetchOptions)
 		if err != nil {
 			if err != git.NoErrAlreadyUpToDate && err.Error() != "remote repository is empty" {
 				result.Error = fmt.Errorf("unable to fetch repo '%s': %v", *repoName, err)
 				slog.Debug(result.Error.Error())
-				return result, result.Error
+				return &result, result.Error
 			}
 		}
 		result.Status = "Fetched"
@@ -301,15 +304,15 @@ func (gc *GitHubClient) CloneOrFetchRepo(repoURL string, localBasePath string, o
 		} else {
 			result.Error = fmt.Errorf("error cloning repo '%s/%s': %v", owner, *repoName, err)
 			slog.Debug(result.Error.Error())
-			return result, result.Error
+			return &result, result.Error
 		}
 	} else {
 		result.Error = fmt.Errorf("error accessing repository '%s/%s': %v", owner, *repoName, err)
 		slog.Debug(result.Error.Error())
-		return result, result.Error
+		return &result, result.Error
 	}
 
-	return result, nil
+	return &result, nil
 }
 
 func ExtractOwnerAndRepoName(input string) (owner string, repoName *string, err error) {

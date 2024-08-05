@@ -245,8 +245,6 @@ func (gc *GitHubClient) CloneOrFetchRepo(repoURL string, localBasePath string, o
 		LocalPath: repoPath,
 	}
 
-	fmt.Fprintf(*progressWriter, "Cloning '%s/%s' into '%s'\n", owner, *repoName, repoPath)
-
 	var auth transport.AuthMethod = nil
 	if gc.token != nil {
 		auth = &http.BasicAuth{
@@ -271,8 +269,9 @@ func (gc *GitHubClient) CloneOrFetchRepo(repoURL string, localBasePath string, o
 	}
 
 	repo, err := git.PlainOpen(repoPath)
-	if err == nil { // repo exists, fetch updates
+	if err == nil {
 		fmt.Fprintf(*progressWriter, "Repository '%s/%s' exists. Fetching updates...\n", owner, *repoName)
+		slog.Debug("Fetching repository", "owner", owner, "repoName", *repoName, "path", repoPath)
 
 		err = repo.Fetch(fetchOptions)
 		if err != nil {
@@ -283,9 +282,11 @@ func (gc *GitHubClient) CloneOrFetchRepo(repoURL string, localBasePath string, o
 			}
 		}
 		result.Status = "Fetched"
-		slog.Debug("Fetch completed", "repoName", *repoName, "path", repoPath)
+		slog.Debug("Successfully fetched", "owner", owner, "repoName", *repoName, "path", repoPath)
 	} else if err == git.ErrRepositoryNotExists { // repo does not exist, clone
+		fmt.Fprintf(*progressWriter, "Cloning '%s/%s' into '%s'\n", owner, *repoName, repoPath)
 		slog.Debug("Cloning repository", "url", repoURL, "repoName", *repoName, "path", repoPath)
+
 		if opts.Bare {
 			_, err = git.PlainClone(repoPath+".git", true, cloneOptions)
 		} else {

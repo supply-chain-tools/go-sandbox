@@ -45,15 +45,8 @@ type CloneResult struct {
 }
 
 type CloneOptions struct {
-	Depth    int
-	Bare     bool
-	Progress io.Writer
-}
-
-func DefaultCloneOptions() *CloneOptions {
-	return &CloneOptions{
-		Progress: os.Stdout,
-	}
+	Depth int
+	Bare  bool
 }
 
 func (gc *GitHubClient) GetGitHubOrganization(org string) (info *github.Organization, found bool, err error) {
@@ -228,11 +221,12 @@ func (gc *GitHubClient) GetRepositories(url string) ([]string, error) {
 	return repoURLs, nil
 }
 
-func (gc *GitHubClient) CloneOrFetchRepo(repoURL string, localBasePath string, opts *CloneOptions) (*CloneResult, error) {
+func (gc *GitHubClient) CloneOrFetchRepo(repoURL string, localBasePath string, opts *CloneOptions, progressWriter *io.Writer) (*CloneResult, error) {
 	var result CloneResult
 
-	if opts == nil {
-		opts = DefaultCloneOptions()
+	if progressWriter == nil {
+		progressWriter = new(io.Writer)
+		*progressWriter = os.Stdout
 	}
 
 	if !strings.HasPrefix(repoURL, "https://") && !strings.HasPrefix(repoURL, "http://") {
@@ -251,7 +245,7 @@ func (gc *GitHubClient) CloneOrFetchRepo(repoURL string, localBasePath string, o
 		LocalPath: repoPath,
 	}
 
-	fmt.Fprintf(opts.Progress, "Cloning '%s/%s' into '%s'\n", owner, *repoName, repoPath)
+	fmt.Fprintf(*progressWriter, "Cloning '%s/%s' into '%s'\n", owner, *repoName, repoPath)
 
 	var auth transport.AuthMethod = nil
 	if gc.token != nil {
@@ -264,21 +258,21 @@ func (gc *GitHubClient) CloneOrFetchRepo(repoURL string, localBasePath string, o
 	cloneOptions := &git.CloneOptions{
 		Auth:     auth,
 		URL:      repoURL,
-		Progress: opts.Progress,
+		Progress: *progressWriter,
 		Depth:    opts.Depth,
 	}
 
 	fetchOptions := &git.FetchOptions{
 		RemoteName: "origin",
 		Auth:       auth,
-		Progress:   opts.Progress,
+		Progress:   *progressWriter,
 		Prune:      true,
 		Depth:      opts.Depth,
 	}
 
 	repo, err := git.PlainOpen(repoPath)
 	if err == nil { // repo exists, fetch updates
-		fmt.Fprintf(opts.Progress, "Repository '%s/%s' exists. Fetching updates...\n", owner, *repoName)
+		fmt.Fprintf(*progressWriter, "Repository '%s/%s' exists. Fetching updates...\n", owner, *repoName)
 
 		err = repo.Fetch(fetchOptions)
 		if err != nil {

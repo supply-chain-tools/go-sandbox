@@ -183,7 +183,7 @@ func fetchRepositories(client *gitkit.GitHubClient, paths []string, opts options
 			defer wg.Done()
 			defer func() { <-sem }()
 
-			_, err := client.CloneOrFetchRepo(repoURL, dir, &cloneOpts)
+			_, err := client.CloneOrFetchRepo(repoURL, dir, &cloneOpts, nil)
 			if err != nil {
 				mu.Lock()
 				errs = append(errs, fmt.Sprintf("failed to clone or fetch repo %s: %v", repoURL, err))

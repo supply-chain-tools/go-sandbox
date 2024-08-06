@@ -3,8 +3,11 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io"
+	"net/url"
 	"os"
 	"os/exec"
+	"path"
 	"strings"
 	"sync"
 
@@ -150,30 +153,28 @@ func parseArgsAndOptions() ([]string, options) {
 }
 
 func fetchRepositories(client *gitkit.GitHubClient, paths []string, opts options) error {
-	dir, err := os.Getwd()
-	if err != nil {
-		return err
-	}
+	var reposToClone []string
 
-	cloneOpts := gitkit.CloneOptions{
+	cloneOpts := gitkit.GitHubOptions{
 		Depth: opts.depth,
 		Bare:  opts.bare,
 	}
 
-	var reposToClone []string
-
 	for _, path := range paths {
-		repos, err := client.GetRepositories(path)
+		normalizedPath, err := validateAndNormalizePath(path)
 		if err != nil {
-			return fmt.Errorf("failed to list repositories for path %s: %w", path, err)
+			return fmt.Errorf("failed to normalize path %s: %w", path, err)
+		}
+
+		repos, err := client.GetRepositories(normalizedPath)
+		if err != nil {
+			return fmt.Errorf("failed to list repositories for path %s: %w", normalizedPath, err)
 		}
 		reposToClone = append(reposToClone, repos...)
 	}
 
 	sem := make(chan struct{}, opts.concurrency)
 	var wg sync.WaitGroup
-	var mu sync.Mutex
-	var errs []string
 
 	for _, repoURL := range reposToClone {
 		wg.Add(1)
@@ -183,21 +184,46 @@ func fetchRepositories(client *gitkit.GitHubClient, paths []string, opts options
 			defer wg.Done()
 			defer func() { <-sem }()
 
-			_, err := client.CloneOrFetchRepo(repoURL, dir, &cloneOpts, nil)
+			result, err := client.CloneOrFetchRepo(repoURL, &io.Discard, &cloneOpts)
 			if err != nil {
-				mu.Lock()
-				errs = append(errs, fmt.Sprintf("failed to clone or fetch repo %s: %v", repoURL, err))
-				mu.Unlock()
+				slog.Debug("Failed to clone/fetch repository", "url", repoURL, "error", err)
+				return
 			}
+
+			fmt.Println("Result:", result)
 		}(repoURL)
 	}
-
 	wg.Wait()
 	close(sem)
 
-	if len(errs) > 0 {
-		return fmt.Errorf("encountered errors: \n%s", strings.Join(errs, "\n"))
+	return nil
+}
+
+func validateAndNormalizePath(gitHubPath string) (string, error) {
+	if strings.HasPrefix(gitHubPath, "http://") {
+		gitHubPath = strings.Replace(gitHubPath, "http://", "https://", 1)
+	} else if !strings.HasPrefix(gitHubPath, "https://") {
+		gitHubPath = "https://" + gitHubPath
 	}
 
-	return nil
+	u, err := url.Parse(gitHubPath)
+	if err != nil {
+		return "", err
+	}
+
+	if u.Hostname() != "github.com" {
+		return "", fmt.Errorf("invalid URL '%s'; must be prefixed with 'https://github.com/'", gitHubPath)
+	}
+
+	parts := strings.Split(strings.TrimPrefix(u.Path, "/"), "/")
+	if len(parts) < 1 || parts[0] == "" {
+		return "", fmt.Errorf("invalid URL '%s' missing user/org in path '%s'", gitHubPath, u.Path)
+	}
+
+	extension := path.Ext(parts[len(parts)-1])
+	if extension != "" && extension != ".git" {
+		return "", fmt.Errorf("invalid URL '%s'; invalid extension '%s'", gitHubPath, extension)
+	}
+
+	return u.String(), nil
 }

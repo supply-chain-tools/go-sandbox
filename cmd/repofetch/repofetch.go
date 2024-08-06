@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
 
 	"log/slog"
 
@@ -59,6 +60,8 @@ func main() {
 	}
 	logger := slog.New(slog.NewTextHandler(os.Stdout, logOptions))
 	slog.SetDefault(logger)
+
+	slog.Debug("Running repofetch", "args", args, "options", opts)
 
 	token, err := getToken(opts)
 	if err != nil {
@@ -153,20 +156,47 @@ func fetchRepositories(client *gitkit.GitHubClient, paths []string, opts options
 	}
 
 	cloneOpts := gitkit.CloneOptions{
-		Depth:       opts.depth,
-		Concurrency: opts.concurrency,
-		Bare:        opts.bare,
+		Depth: opts.depth,
+		Bare:  opts.bare,
 	}
 
-	for _, path := range paths {
-		owner, repoName, err := gitkit.ExtractOwnerAndRepoName(path)
-		if err != nil {
-			return fmt.Errorf("failed to extract owner and repo name for path %s: %w", path, err)
-		}
+	var reposToClone []string
 
-		if err := client.CloneOrFetchAllRepos(owner, repoName, dir, cloneOpts); err != nil {
-			return fmt.Errorf("failed to clone or fetch repos for %s/%s: %w", owner, *repoName, err)
+	for _, path := range paths {
+		repos, err := client.GetRepositories(path)
+		if err != nil {
+			return fmt.Errorf("failed to list repositories for path %s: %w", path, err)
 		}
+		reposToClone = append(reposToClone, repos...)
+	}
+
+	sem := make(chan struct{}, opts.concurrency)
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	var errs []string
+
+	for _, repoURL := range reposToClone {
+		wg.Add(1)
+		sem <- struct{}{}
+
+		go func(repoURL string) {
+			defer wg.Done()
+			defer func() { <-sem }()
+
+			_, err := client.CloneOrFetchRepo(repoURL, dir, &cloneOpts, nil)
+			if err != nil {
+				mu.Lock()
+				errs = append(errs, fmt.Sprintf("failed to clone or fetch repo %s: %v", repoURL, err))
+				mu.Unlock()
+			}
+		}(repoURL)
+	}
+
+	wg.Wait()
+	close(sem)
+
+	if len(errs) > 0 {
+		return fmt.Errorf("encountered errors: \n%s", strings.Join(errs, "\n"))
 	}
 
 	return nil

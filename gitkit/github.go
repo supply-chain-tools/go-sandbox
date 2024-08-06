@@ -3,16 +3,16 @@ package gitkit
 import (
 	"context"
 	"fmt"
-	"github.com/go-git/go-git/v5"
-	"github.com/go-git/go-git/v5/plumbing/transport"
-	"github.com/go-git/go-git/v5/plumbing/transport/http"
-	"github.com/google/go-github/v61/github"
-	"log"
+	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
+
+	"github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/plumbing/transport"
+	"github.com/go-git/go-git/v5/plumbing/transport/http"
+	"github.com/google/go-github/v61/github"
 )
 
 type GitHubClient struct {
@@ -36,10 +36,17 @@ func NewGitHubClient() *GitHubClient {
 	}
 }
 
+type CloneResult struct {
+	RepoName  string
+	RepoURL   string
+	LocalPath string
+	Status    string
+	Error     error
+}
+
 type CloneOptions struct {
-	Depth       int
-	Concurrency int
-	Bare        bool
+	Depth int
+	Bare  bool
 }
 
 func (gc *GitHubClient) GetGitHubOrganization(org string) (info *github.Organization, found bool, err error) {
@@ -140,8 +147,103 @@ func (gc *GitHubClient) ListAllReposForUser(user string) ([]*github.Repository, 
 	return repos, nil
 }
 
-func (gc *GitHubClient) CloneOrFetchGitHubToPath(org string, repoName string, path string, opts *CloneOptions) error {
-	fmt.Printf("Cloning '%s/%s'\n", org, repoName)
+func (gc *GitHubClient) GetRepositories(url string) ([]string, error) {
+	url = strings.TrimSuffix(url, ".git")
+
+	owner, repoName, err := ExtractOwnerAndRepoName(url)
+	if err != nil {
+		return nil, fmt.Errorf("invalid URL '%s': %w", url, err)
+	}
+
+	orgInfo, res, err := gc.client.Organizations.Get(context.Background(), owner)
+	isOrg := res != nil && res.StatusCode == 200
+	if err != nil && (res == nil || res.StatusCode != 404) {
+		return nil, fmt.Errorf("error fetching organization info: %w", err)
+	}
+
+	userInfo, res, err := gc.client.Users.Get(context.Background(), owner)
+	isUser := res != nil && res.StatusCode == 200
+	if err != nil && (res == nil || res.StatusCode != 404) {
+		return nil, fmt.Errorf("error fetching user info: %w", err)
+	}
+
+	if !(isOrg || isUser) {
+		return nil, fmt.Errorf("no user or organization named '%s'", owner)
+	}
+
+	if isOrg {
+		if strings.ToLower(owner) != strings.ToLower(*orgInfo.Login) {
+			return nil, fmt.Errorf("actual '%s' and requested '%s' org differ in more than casing", *orgInfo.Login, owner)
+		}
+		owner = *orgInfo.Login
+	} else {
+		if strings.ToLower(owner) != strings.ToLower(*userInfo.Login) {
+			return nil, fmt.Errorf("actual '%s' and requested '%s' user differ in more than casing", *orgInfo.Login, owner)
+		}
+		owner = *userInfo.Login
+	}
+
+	var repoURLs []string
+
+	if repoName == nil { // all repos
+		var repos []*github.Repository
+		if isOrg {
+			repos, err = gc.ListAllReposForOrg(owner)
+		} else {
+			repos, err = gc.ListAllReposForUser(owner)
+		}
+		if err != nil {
+			return nil, fmt.Errorf("error listing repositories: %w", err)
+		}
+
+		for _, repo := range repos {
+			repoURLs = append(repoURLs, fmt.Sprintf("https://github.com/%s/%s.git", owner, repo.GetName()))
+		}
+	} else { // single repo
+		if *repoName == "" {
+			return nil, fmt.Errorf("repository name must not be empty")
+		}
+
+		repoInfo, found, err := gc.GetGitHubRepo(owner, *repoName)
+		if err != nil {
+			return nil, fmt.Errorf("error fetching repository '%s/%s': %w", owner, *repoName, err)
+		}
+		if !found {
+			return nil, fmt.Errorf("repository '%s/%s' not found", owner, *repoName)
+		}
+		if !strings.EqualFold(*repoInfo.Name, *repoName) {
+			return nil, fmt.Errorf("actual '%s' and requested '%s' repo differ in more than casing", *repoInfo.Name, *repoName)
+		}
+
+		repoURLs = append(repoURLs, fmt.Sprintf("https://github.com/%s/%s.git", owner, *repoName))
+	}
+
+	return repoURLs, nil
+}
+
+func (gc *GitHubClient) CloneOrFetchRepo(repoURL string, localBasePath string, opts *CloneOptions, progressWriter *io.Writer) (*CloneResult, error) {
+	var result CloneResult
+
+	if progressWriter == nil {
+		progressWriter = new(io.Writer)
+		*progressWriter = os.Stdout
+	}
+
+	if !strings.HasPrefix(repoURL, "https://") && !strings.HasPrefix(repoURL, "http://") {
+		repoURL = "https://" + repoURL
+	}
+
+	owner, repoName, err := ExtractOwnerAndRepoName(repoURL)
+	if err != nil {
+		return &result, fmt.Errorf("invalid URL '%s': %w", repoURL, err)
+	}
+
+	repoPath := filepath.Join(localBasePath, owner, *repoName)
+	result = CloneResult{
+		RepoName:  *repoName,
+		RepoURL:   repoURL,
+		LocalPath: repoPath,
+	}
 
 	var auth transport.AuthMethod = nil
 	if gc.token != nil {
@@ -153,194 +255,59 @@ func (gc *GitHubClient) CloneOrFetchGitHubToPath(org string, repoName string, pa
 
 	cloneOptions := &git.CloneOptions{
 		Auth:     auth,
-		URL:      "https://github.com/" + org + "/" + repoName,
-		Progress: os.Stdout,
+		URL:      repoURL,
+		Progress: *progressWriter,
 		Depth:    opts.Depth,
 	}
 
 	fetchOptions := &git.FetchOptions{
 		RemoteName: "origin",
 		Auth:       auth,
-		Progress:   os.Stdout,
+		Progress:   *progressWriter,
 		Prune:      true,
 		Depth:      opts.Depth,
 	}
 
-	var err error
-	if opts.Bare {
-		_, err = git.PlainClone(path+".git", true, cloneOptions)
-	} else {
-		_, err = git.PlainClone(path, false, cloneOptions)
-	}
+	repo, err := git.PlainOpen(repoPath)
+	if err == nil {
+		fmt.Fprintf(*progressWriter, "Repository '%s/%s' exists. Fetching updates...\n", owner, *repoName)
+		slog.Debug("Fetching repository", "owner", owner, "repoName", *repoName, "path", repoPath)
 
-	if err != nil {
-		errorString := err.Error()
-		if errorString == "repository already exists" {
-			fmt.Printf("Updating\n")
-			repo, err := git.PlainOpen(path)
-			if err != nil {
-				return fmt.Errorf("unable to open git repository '%s': %w", path, err)
-			}
-
-			err = repo.Fetch(fetchOptions)
-			if err != nil && err.Error() != "already up-to-date" && err.Error() != "remote repository is empty" {
-				return fmt.Errorf("unable to fetch repo '%s': %w", path, err)
-			}
-		} else if errorString != "remote repository is empty" {
-			// FIXME better tracking of failed repos
-			// https://stackoverflow.com/a/57733557
-			log.Printf("warning skipping repo '%s/%s' due to error '%s'", org, repoName, errorString)
-		}
-	}
-
-	return nil
-}
-
-func (gc *GitHubClient) CloneOrFetchAllRepos(owner string, repoName *string, localBasePath string, opts CloneOptions) error {
-	orgInfo, isOrg, err := gc.GetGitHubOrganization(owner)
-	if err != nil {
-		return err
-	}
-
-	userInfo, isUser, err := gc.GetGitHubUser(owner)
-	if err != nil {
-		return err
-	}
-
-	if !(isOrg || isUser) {
-		return fmt.Errorf("no user or org named %s", owner)
-	}
-
-	if isOrg {
-		if strings.ToLower(owner) != strings.ToLower(*orgInfo.Login) {
-			return fmt.Errorf("actual '%s' and requested '%s' org differ in more than casing", *orgInfo.Login, owner)
-		}
-		owner = *orgInfo.Login
-	} else {
-		if strings.ToLower(owner) != strings.ToLower(*userInfo.Login) {
-			return fmt.Errorf("actual '%s' and requested '%s' user differ in more than casing", *orgInfo.Login, owner)
-		}
-		owner = *userInfo.Login
-	}
-
-	ownerPath, err := createDirectoryIfNotExists(localBasePath, owner)
-	if err != nil {
-		return err
-	}
-
-	if repoName == nil {
-		var allRepos []*github.Repository
-		var ownerType string
-		if isOrg {
-			ownerType = "organization"
-			allRepos, err = gc.ListAllReposForOrg(owner)
-			if err != nil {
-				return err
-			}
-		} else {
-			ownerType = "user"
-			allRepos, err = gc.ListAllReposForUser(owner)
-			if err != nil {
-				return err
+		err = repo.Fetch(fetchOptions)
+		if err != nil {
+			if err != git.NoErrAlreadyUpToDate && err.Error() != "remote repository is empty" {
+				result.Error = fmt.Errorf("unable to fetch repo '%s': %v", *repoName, err)
+				slog.Debug(result.Error.Error())
+				return &result, result.Error
 			}
 		}
-
-		logFields := []interface{}{
-			"owner", owner,
-			"ownerType", ownerType,
-			"numberOfRepos", len(allRepos),
-			"concurrency", opts.Concurrency,
-			"depth", opts.Depth,
-		}
+		result.Status = "Fetched"
+		slog.Debug("Successfully fetched", "owner", owner, "repoName", *repoName, "path", repoPath)
+	} else if err == git.ErrRepositoryNotExists { // repo does not exist, clone
+		fmt.Fprintf(*progressWriter, "Cloning '%s/%s' into '%s'\n", owner, *repoName, repoPath)
+		slog.Debug("Cloning repository", "url", repoURL, "repoName", *repoName, "path", repoPath)
 
 		if opts.Bare {
-			logFields = append(logFields, "bare", true)
-		}
-
-		slog.Debug("cloning/fetching", logFields...)
-
-		sem := make(chan struct{}, opts.Concurrency)
-		var wg sync.WaitGroup
-
-		for _, r := range allRepos {
-			wg.Add(1)
-			sem <- struct{}{}
-
-			go func(repo *github.Repository) {
-				defer wg.Done()
-				defer func() { <-sem }()
-
-				fmt.Println("Cloning", repo.GetName())
-
-				repoPath := filepath.Join(ownerPath, repo.GetName())
-				err := gc.CloneOrFetchGitHubToPath(owner, repo.GetName(), repoPath, &opts)
-				if err != nil {
-					log.Printf("Error cloning repo %s/%s: %v", owner, repo.GetName(), err)
-				}
-			}(r)
-		}
-
-		wg.Wait()
-
-	} else {
-		if *repoName == "" {
-			return fmt.Errorf("repo name must not be empty string")
-		}
-
-		repoInfo, found, err := gc.GetGitHubRepo(owner, *repoName)
-		if err != nil {
-			return err
-		}
-
-		if !found {
-			return fmt.Errorf("repository '%s/%s' not found\n", owner, *repoName)
-		}
-
-		if strings.ToLower(*repoInfo.Name) != strings.ToLower(*repoName) {
-			return fmt.Errorf("actual '%s' and requested '%s' repo differ in more than casing", *repoInfo.Name, *repoName)
-		}
-		*repoName = *repoInfo.Name
-
-		var ownerType string
-		if isOrg {
-			ownerType = "organization"
+			_, err = git.PlainClone(repoPath+".git", true, cloneOptions)
 		} else {
-			ownerType = "user"
+			_, err = git.PlainClone(repoPath, false, cloneOptions)
 		}
 
-		slog.Debug("cloning/fetching",
-			"owner", owner,
-			"ownerType", ownerType,
-			"repoName", repoName)
-
-		repoPath := filepath.Join(ownerPath, *repoName)
-		err = gc.CloneOrFetchGitHubToPath(owner, *repoName, repoPath, &opts)
-		if err != nil {
-			return err
+		if err == nil {
+			result.Status = "Cloned"
+			slog.Debug("Successfully cloned", "url", repoURL, "repoName", *repoName, "path", repoPath)
+		} else {
+			result.Error = fmt.Errorf("error cloning repo '%s/%s': %v", owner, *repoName, err)
+			slog.Debug(result.Error.Error())
+			return &result, result.Error
 		}
+	} else {
+		result.Error = fmt.Errorf("error accessing repository '%s/%s': %v", owner, *repoName, err)
+		slog.Debug(result.Error.Error())
+		return &result, result.Error
 	}
 
-	return nil
-}
-
-func createDirectoryIfNotExists(basePath string, relativePath string) (string, error) {
-	path := filepath.Join(basePath, relativePath)
-	stat, err := os.Stat(path)
-	if err != nil && os.IsNotExist(err) {
-		err := os.Mkdir(path, os.ModePerm)
-		if err != nil {
-			return "", err
-		}
-		return path, nil
-	} else if err != nil {
-		return "", err
-	}
-
-	if !stat.IsDir() {
-		return "", fmt.Errorf("path '%s' exists but is not a directory", path)
-	}
-
-	return path, nil
+	return &result, nil
 }
 
 func ExtractOwnerAndRepoName(input string) (owner string, repoName *string, err error) {
@@ -352,7 +319,7 @@ func ExtractOwnerAndRepoName(input string) (owner string, repoName *string, err 
 	} else if strings.HasPrefix(input, githubPrefix) {
 		userOrOrg = strings.TrimPrefix(input, githubPrefix)
 	} else {
-		return "", nil, fmt.Errorf("invalid target '%s'; must be prefixed with 'github.com/'", userOrOrg)
+		return "", nil, fmt.Errorf("invalid target '%s'; must start with '%s' or '%s", userOrOrg, httpsGithubPrefix, githubPrefix)
 	}
 
 	userOrOrg = strings.Trim(userOrOrg, "/")

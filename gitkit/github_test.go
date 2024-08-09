@@ -5,33 +5,33 @@ import (
 )
 
 func TestExtractOwnerAndRepoName(t *testing.T) {
-	owner, repoName, err := ExtractOwnerAndRepoName("github.com/Foo")
-	if err != nil {
-		t.Fatal(err)
+	tests := []struct {
+		input     string
+		wantErr   bool
+		wantOwner string
+		wantRepo  *string
+	}{
+		{"github.com/Foo", true, "", nil},
+		{"http://github.com/Foo", true, "", nil},
+		{"https://github.com/Foo", false, "Foo", nil},
+		{"https://github.com/Foo/", false, "Foo", nil},
+		{"https://github.com/Foo/Bar", false, "Foo", &[]string{"Bar"}[0]},
 	}
 
-	if owner != "Foo" {
-		t.Errorf("want organization 'Foo', got '%s'", owner)
-	}
+	for _, tt := range tests {
+		owner, repoName, err := ExtractOwnerAndRepoName(tt.input)
+		if (err != nil) != tt.wantErr {
+			t.Fatalf("ExtractOwnerAndRepoName(%q) error = %v, wantErr %v", tt.input, err, tt.wantErr)
+		}
 
-	if repoName != nil {
-		t.Errorf("want empty repo name, got '%s'", *repoName)
-	}
+		if owner != tt.wantOwner {
+			t.Errorf("ExtractOwnerAndRepoName(%q) = owner %q, want %q", tt.input, owner, tt.wantOwner)
+		}
 
-	owner, repoName, err = ExtractOwnerAndRepoName("github.com/Foo/Bar")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if owner != "Foo" {
-		t.Errorf("want organization 'Foo', got '%s'", owner)
-	}
-
-	if repoName == nil {
-		t.Fatal("want repo name 'Bar', got nil")
-	}
-
-	if *repoName != "Bar" {
-		t.Errorf("want repo name 'Bar', got '%s'", *repoName)
+		if (repoName == nil) != (tt.wantRepo == nil) {
+			t.Errorf("ExtractOwnerAndRepoName(%q) = repoName %v, want %v", tt.input, repoName, tt.wantRepo)
+		} else if repoName != nil && *repoName != *tt.wantRepo {
+			t.Errorf("ExtractOwnerAndRepoName(%q) = repoName %q, want %q", tt.input, *repoName, *tt.wantRepo)
+		}
 	}
 }

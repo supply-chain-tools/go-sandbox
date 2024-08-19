@@ -200,9 +200,9 @@ func fetchRepositories(client *gitkit.GitHubClient, uris []string, opts options)
 func validateAndNormalizeURI(gitHubURI string) (string, error) {
 	if strings.HasPrefix(gitHubURI, "github.com/") {
 		gitHubURI = "https://" + gitHubURI
-	} else if strings.HasPrefix(gitHubURI, "http://github.com/") {
-		gitHubURI = strings.Replace(gitHubURI, "http://", "https://", 1)
-	} else if !strings.HasPrefix(gitHubURI, "https://github.com/") {
+	}
+
+	if !strings.HasPrefix(gitHubURI, "https://github.com/") {
 		return "", fmt.Errorf("invalid URI '%s'; must be prefixed with 'https://github.com/' or 'github.com/'", gitHubURI)
 	}
 

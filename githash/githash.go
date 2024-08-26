@@ -30,7 +30,6 @@ type GitHash interface {
 }
 
 type gitHash struct {
-	repo      *git.Repository
 	repoState *gitkit.RepoState
 	hash      hash.Hash
 	commitMap map[plumbing.Hash][]byte
@@ -41,8 +40,11 @@ type gitHash struct {
 
 func NewGitHash(repo *git.Repository, hash hash.Hash) GitHash {
 	repoState := gitkit.LoadRepoState(repo)
+	return NewGitHashFromRepoState(repoState, hash)
+}
+
+func NewGitHashFromRepoState(repoState *gitkit.RepoState, hash hash.Hash) GitHash {
 	return &gitHash{
-		repo:      repo,
 		repoState: repoState,
 		hash:      hash,
 		commitMap: make(map[plumbing.Hash][]byte),

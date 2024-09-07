@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"strings"
@@ -149,31 +150,29 @@ func parseArgsAndOptions() ([]string, options) {
 	return args, opts
 }
 
-func fetchRepositories(client *gitkit.GitHubClient, paths []string, opts options) error {
-	dir, err := os.Getwd()
-	if err != nil {
-		return err
-	}
+func fetchRepositories(client *gitkit.GitHubClient, uris []string, opts options) error {
+	var reposToClone []string
 
-	cloneOpts := gitkit.CloneOptions{
+	cloneOpts := gitkit.GitHubOptions{
 		Depth: opts.depth,
 		Bare:  opts.bare,
 	}
 
-	var reposToClone []string
-
-	for _, path := range paths {
-		repos, err := client.GetRepositories(path)
+	for _, uri := range uris {
+		normalizedURIs, err := validateAndNormalizeURI(uri)
 		if err != nil {
-			return fmt.Errorf("failed to list repositories for path %s: %w", path, err)
+			return fmt.Errorf("failed to normalize path %s: %w", uri, err)
+		}
+
+		repos, err := client.GetRepositories(normalizedURIs)
+		if err != nil {
+			return fmt.Errorf("failed to list repositories for path %s: %w", normalizedURIs, err)
 		}
 		reposToClone = append(reposToClone, repos...)
 	}
 
 	sem := make(chan struct{}, opts.concurrency)
 	var wg sync.WaitGroup
-	var mu sync.Mutex
-	var errs []string
 
 	for _, repoURL := range reposToClone {
 		wg.Add(1)
@@ -183,21 +182,29 @@ func fetchRepositories(client *gitkit.GitHubClient, paths []string, opts options
 			defer wg.Done()
 			defer func() { <-sem }()
 
-			_, err := client.CloneOrFetchRepo(repoURL, dir, &cloneOpts, nil)
+			result, err := client.CloneOrFetchRepo(repoURL, &io.Discard, &cloneOpts)
 			if err != nil {
-				mu.Lock()
-				errs = append(errs, fmt.Sprintf("failed to clone or fetch repo %s: %v", repoURL, err))
-				mu.Unlock()
+				slog.Debug("Failed to clone/fetch repository", "url", repoURL, "error", err)
+				return
 			}
+
+			fmt.Println("Result:", result)
 		}(repoURL)
 	}
-
 	wg.Wait()
 	close(sem)
 
-	if len(errs) > 0 {
-		return fmt.Errorf("encountered errors: \n%s", strings.Join(errs, "\n"))
+	return nil
+}
+
+func validateAndNormalizeURI(gitHubURI string) (string, error) {
+	if strings.HasPrefix(gitHubURI, "github.com/") {
+		gitHubURI = "https://" + gitHubURI
 	}
 
-	return nil
+	if !strings.HasPrefix(gitHubURI, "https://github.com/") {
+		return "", fmt.Errorf("invalid URI '%s'; must be prefixed with 'https://github.com/' or 'github.com/'", gitHubURI)
+	}
+
+	return gitHubURI, nil
 }

@@ -10,6 +10,17 @@ validating...
 OK
 ```
 
+For `github.com` repos it is also possible place the config in 
+```sh
+~/.config/gitverify/github.com/supply-chain-tools/gitverify.json
+# i.e. ~/config/gitverify/<forge>/<organization>/gitverify.json
+```
+and run
+```
+gitverify
+```
+This will use the first upstream URL in the git config to infer the forge, organization and repository name.
+
 ## Command line
 
 ### Verify that expected commit, tag, and/or branch is present

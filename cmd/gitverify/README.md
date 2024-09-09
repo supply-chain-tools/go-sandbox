@@ -21,6 +21,19 @@ gitverify
 ```
 This will use the first upstream URL in the git config to infer the forge, organization and repository name.
 
+The default without arguments is also to store local state (described in [threat-model.md](threat-model.md)). It will be
+placed in
+```sh
+~/.config/gitverify/github.com/supply-chain-tools/go-sandbox/local.json
+# i.e. ~/config/gitverify/<forge>/<organization>/<repository>/local.json
+```
+
+## Migration Guide
+See [migrate.md](migrate.md).
+
+## Config File
+See [config.md](config.md).
+
 ## Command line
 
 ### Verify that expected commit, tag, and/or branch is present
@@ -40,9 +53,6 @@ To verify that a `commit`, `tag` and/or `branch` is what `HEAD` points to
 ```sh
 gitverify --commit 1f46f2053221c040ce5bcba0239bc09214a37658 --tag v0.0.1 --branch main --verify-on-head
 ```
-
-## Config File
-See [config.md](config.md).
 
 ## Threat Model
 See [threat-model.md](threat-model.md).

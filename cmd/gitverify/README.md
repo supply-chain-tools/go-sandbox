@@ -21,7 +21,7 @@ gitverify
 ```
 This will use the first upstream URL in the git config to infer the forge, organization and repository name.
 
-The default without arguments is also to store local state (described in [threat-model.md](threat-model.md)). It will be
+The default when inferring the config is also to store local state (described in [threat-model.md](threat-model.md)). It will be
 placed in
 ```sh
 ~/.config/gitverify/github.com/supply-chain-tools/go-sandbox/local.json
@@ -123,3 +123,9 @@ Run gc
 ```sh
 git gc --prune=now
 ```
+
+### Merge Tags
+Currently not supported.
+
+### Tags not pointing to commits
+Currently not supported.

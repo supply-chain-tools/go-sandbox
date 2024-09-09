@@ -1,0 +1,66 @@
+{
+  "_type": "https://supply-chain-tools.github.io/schemas/gitverify/v0.1",
+  "identities": [
+    {
+      "email": "stian.kristoffersen@telenor.no",
+      "forgeUsername" : "stiankri-telenor",
+      "forgeUserId": "155450741",
+      "sshPublicKeys": [
+        "sk-ssh-ed25519@openssh.com AAAAGnNrLXNzaC1lZDI1NTE5QG9wZW5zc2guY29tAAAAIHa4MOkvaZbhdeWuYUFQ1sywWYkpW9x9uVTX+RlDdMvXAAAABHNzaDo="
+      ]
+    },
+    {
+      "email": "33384479+dev-bio@users.noreply.github.com",
+      "forgeUsername" : "dev-bio",
+      "forgeUserId": "33384479",
+      "sshPublicKeys": [
+        "sk-ssh-ed25519@openssh.com AAAAGnNrLXNzaC1lZDI1NTE5QG9wZW5zc2guY29tAAAAIDTCGpjJM/to9icZbLRiyYzz1UoPDTSbqhwLRotpWd4sAAAABHNzaDo="
+      ]
+    },
+    {
+      "email": "44880186+root4loot@users.noreply.github.com",
+      "forgeUsername" : "root4loot",
+      "forgeUserId": "44880186",
+      "sshPublicKeys": [
+        "sk-ssh-ed25519@openssh.com AAAAGnNrLXNzaC1lZDI1NTE5QG9wZW5zc2guY29tAAAAIPptdMOOzjxQ1/Xq9zTfEcHvKfBpc0wA4av1/9sp7DjpAAAABHNzaDo="
+      ]
+    }
+  ],
+  "maintainers": [
+    "stian.kristoffersen@telenor.no",
+    "33384479+dev-bio@users.noreply.github.com",
+    "44880186+root4loot@users.noreply.github.com"
+  ],
+  "rules": {
+    "allowSSHSignatures": true,
+    "requireSSHUserVerified": false
+  },
+  "forgeId": "github.com",
+  "forgeRules": {
+    "allowMergeCommits": true
+  },
+  "protectedBranches": ["main"],
+  "repositories": [
+    {
+      "uri": "git+https://github.com/supply-chain-tools/go-sandbox.git",
+      "after": [{
+        "sha1": "d914a9ded0d3ed2a3bf25ab40e468630c04d4001",
+        "branch": "main"
+      }]
+    },
+    {
+      "uri": "git+https://github.com/supply-chain-tools/schemas.git",
+      "after": [{
+        "sha1": "28337ad20c1ee164865a745560ef01d257ff009a",
+        "branch": "main"
+      }]
+    },
+    {
+      "uri": "git+https://github.com/supply-chain-tools/release-prototype.git",
+      "after": [{
+        "sha1": "5a2a23a6c4ac5b607a624b5ea3dd9a6a8df2f0ab",
+        "branch": "main"
+      }]
+    }
+  ]
+}

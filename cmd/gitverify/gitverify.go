@@ -154,7 +154,7 @@ func parseVerifyOptions(osArgs []string) (*VerifyOptions, error) {
 	flags.BoolVar(&verifyOnTip, "verify-on-tip", false, "")
 
 	args := osArgs[1:]
-	if len(osArgs) > 2 {
+	if len(osArgs) > 2 && !strings.HasPrefix(osArgs[1], "-") {
 		args = osArgs[2:]
 	}
 
@@ -162,6 +162,10 @@ func parseVerifyOptions(osArgs []string) (*VerifyOptions, error) {
 	if err != nil || help || h {
 		fmt.Println(usage)
 		os.Exit(0)
+	}
+
+	if len(flags.Args()) > 0 {
+		return nil, fmt.Errorf("no arguments expected, got: %s", strings.Join(flags.Args(), ","))
 	}
 
 	if version {

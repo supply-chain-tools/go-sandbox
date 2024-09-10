@@ -32,12 +32,18 @@
     "44880186+root4loot@users.noreply.github.com"
   ],
   "rules": {
-    "allowSSHSignatures": true,
-    "requireSSHUserVerified": false
+    "allowSshSignatures": true,
+    "requireSshUserPresent": true,
+    "requireSshUserVerified": false,
+    "allowGpgSignatures": false,
+    "requireSignedTags": true,
+    "requireMergeCommits": true,
+    "requireUpToDate": true
   },
   "forgeId": "github.com",
   "forgeRules": {
-    "allowMergeCommits": true
+    "allowMergeCommits": false,
+    "allowContentCommits": false
   },
   "protectedBranches": ["main"],
   "repositories": [

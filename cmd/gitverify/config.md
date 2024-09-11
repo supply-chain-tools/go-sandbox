@@ -34,7 +34,8 @@
     "requireSshUserVerified": true,
     "allowGpgSignatures": false,
     "requireSignedTags": true,
-    "requireMergeCommits": true
+    "requireMergeCommits": true,
+    "requireUpToDate": true
   },
   "protectedBranches": ["main"],
   "forgeId": "github.com",

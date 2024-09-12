@@ -94,8 +94,13 @@ func processOptionsAndArgs() (algorithm hash.Hash, objectType githash.ObjectType
 	flags.BoolVar(&debugMode, "debug", false, "")
 
 	err = flags.Parse(os.Args[1:])
-	if err != nil || help || h {
+	if err != nil {
 		return nil, "", nil, fmt.Errorf("failed to parse flags: %w", err)
+	}
+
+	if h || help {
+		fmt.Println(usage)
+		os.Exit(0)
 	}
 
 	if algorithmString != defaultAlgorithm && algorithmStringShort != defaultAlgorithm {

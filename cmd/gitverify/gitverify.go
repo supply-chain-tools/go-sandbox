@@ -410,7 +410,7 @@ func afterCandidates(opts *GenerateOptions) error {
 			}
 
 			if allBranches.Size() == 1 {
-				candidates[i].Branch = &branchName
+				candidates[i].Branch = &allBranches.Values()[0]
 			}
 		}
 	}

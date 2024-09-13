@@ -51,6 +51,7 @@
       "uri": "git+https://github.com/supply-chain-tools/go-sandbox.git",
       "after": [{
         "sha1": "d914a9ded0d3ed2a3bf25ab40e468630c04d4001",
+        "sha256": "1a09de529c38d6d52a710c2cf4bd2ce209af7398908be1aa8052c318cdcd60fb",
         "branch": "main"
       }]
     },
@@ -58,6 +59,7 @@
       "uri": "git+https://github.com/supply-chain-tools/schemas.git",
       "after": [{
         "sha1": "28337ad20c1ee164865a745560ef01d257ff009a",
+        "sha256": "e8c0c5462dce22eba23cf5d28d0f0d8786af1712400ed2b2c185578c3c33d76e",
         "branch": "main"
       }]
     },
@@ -65,6 +67,7 @@
       "uri": "git+https://github.com/supply-chain-tools/release-prototype.git",
       "after": [{
         "sha1": "5a2a23a6c4ac5b607a624b5ea3dd9a6a8df2f0ab",
+        "sha256": "43e69644953743231a19eb975dbcd7af55b17d7e1879147e55994232afb48ffa",
         "branch": "main"
       }]
     }

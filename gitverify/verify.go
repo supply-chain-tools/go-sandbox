@@ -565,11 +565,6 @@ func computeCommitMetadata(state *gitkit.RepoState, repoConfig *RepoConfig, gitH
 			return nil, fmt.Errorf("failed to verify hash %s", hash)
 		}
 
-		_, found := commitMap[hash]
-		if found {
-			continue
-		}
-
 		var verifiedSHA256 [32]byte
 		var sha256WasVerified = false
 		if repoConfig.afterSHA256.Size() > 0 {
@@ -604,7 +599,7 @@ func computeCommitMetadata(state *gitkit.RepoState, repoConfig *RepoConfig, gitH
 
 		matchedAfter := false
 
-		_, found = repoConfig.afterSHA1ToSHA256[hash]
+		_, found := repoConfig.afterSHA1ToSHA256[hash]
 		if found {
 			// Both SHA-1 and SHA-256 specified, check that they are the same
 			if matchedAfterSHA1 != matchedAfterSHA256 {
@@ -627,7 +622,14 @@ func computeCommitMetadata(state *gitkit.RepoState, repoConfig *RepoConfig, gitH
 				repoConfig.sha1ToBranch[hash] = branch
 				repoConfig.branchToSHA1[branch] = hash
 			}
+		}
 
+		_, found = commitMap[hash]
+		if found {
+			continue
+		}
+
+		if matchedAfter {
 			err := ignoreCommitAndParents(commit, commitMap, state)
 			if err != nil {
 				return nil, err

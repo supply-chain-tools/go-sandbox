@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/supply-chain-tools/go-sandbox/githash"
 	"github.com/supply-chain-tools/go-sandbox/gitkit"
@@ -226,15 +227,20 @@ func parseVerifyOptions(osArgs []string) (*VerifyOptions, error) {
 }
 
 type GenerateOptions struct {
-	repoDir   string
-	useSHA256 bool
+	repoDir        string
+	useSHA256      bool
+	configFilePath string
+	repoUri        string
 }
 
 func parseGenerateOptions(args []string) (*GenerateOptions, error) {
 	var debugMode, useSHA256, help, h bool
+	var configFilePath, repoUri string
 	flags := flag.NewFlagSet("generate", flag.ExitOnError)
 	flags.BoolVar(&debugMode, "debug", false, "")
 	flags.BoolVar(&useSHA256, "sha256", false, "")
+	flags.StringVar(&configFilePath, "config-file", "", "")
+	flags.StringVar(&repoUri, "repository-uri", "", "")
 
 	flags.BoolVar(&help, "help", false, "")
 	flags.BoolVar(&h, "h", false, "")
@@ -257,8 +263,10 @@ func parseGenerateOptions(args []string) (*GenerateOptions, error) {
 	}
 
 	return &GenerateOptions{
-		repoDir:   repoDir,
-		useSHA256: useSHA256,
+		repoDir:        repoDir,
+		useSHA256:      useSHA256,
+		configFilePath: configFilePath,
+		repoUri:        repoUri,
 	}, nil
 }
 
@@ -308,39 +316,23 @@ func verify(opts *VerifyOptions) error {
 	sha256Hash := githash.NewGitHashFromRepoState(state, sha256.New())
 
 	var localStatePath string
-	if configFilePath == "" {
-		forge, org, repoName := gitverify.InferForgeOrgAndRepo(repo)
-		configFilePath, err = gitverify.GetConfigPath(forge, org)
-		if err != nil {
-			return err
-		}
 
-		repoUri = "git+https://" + forge + "/" + org + "/" + repoName + ".git"
-
-		if localState {
-			localStatePath, err = gitverify.GetLocalStatePath(forge, org, repoName)
-			if err != nil {
-				return err
-			}
-		}
-	}
-
-	config, err := gitverify.LoadConfig(configFilePath)
-	if err != nil {
-		return fmt.Errorf("failed to load config: %w", err)
-	}
-
-	repoConfig, err := gitverify.LoadRepoConfig(config, repoUri)
-	if err != nil {
-		return fmt.Errorf("failed to parse config %s: %w", configFilePath, err)
-	}
-
+	var repoConfig *gitverify.RepoConfig
+	repoConfig, repoUri, err = loadRepoConfig(repo, configFilePath, repoUri)
 	err = gitverify.Verify(repo, state, repoConfig, sha1Hash, sha256Hash, validateOptions)
 	if err != nil {
 		return err
 	}
 
 	if localState {
+		if configFilePath == "" {
+			forge, org, repoName := gitverify.InferForgeOrgAndRepo(repo)
+			localStatePath, err = gitverify.GetLocalStatePath(forge, org, repoName)
+			if err != nil {
+				return err
+			}
+		}
+
 		err = gitverify.VerifyLocalState(repo, state, repoConfig, repoUri, localStatePath, sha1Hash, sha256Hash)
 		if err != nil {
 			return fmt.Errorf("failed to verify local state: %w", err)
@@ -356,6 +348,32 @@ func verify(opts *VerifyOptions) error {
 	return nil
 }
 
+func loadRepoConfig(repo *git.Repository, configFilePath string, inputRepoUri string) (config *gitverify.RepoConfig, repoUri string, err error) {
+	repoUri = inputRepoUri
+	if configFilePath == "" {
+		forge, org, repoName := gitverify.InferForgeOrgAndRepo(repo)
+		var err error
+		configFilePath, err = gitverify.GetConfigPath(forge, org)
+		if err != nil {
+			return nil, "", err
+		}
+
+		repoUri = "git+https://" + forge + "/" + org + "/" + repoName + ".git"
+	}
+
+	parsedConfig, err := gitverify.LoadConfig(configFilePath)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to load config: %w", err)
+	}
+
+	repoConfig, err := gitverify.LoadRepoConfig(parsedConfig, repoUri)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to parse config %s: %w", configFilePath, err)
+	}
+
+	return repoConfig, repoUri, nil
+}
+
 func afterCandidates(opts *GenerateOptions) error {
 	repoDir := opts.repoDir
 	useSHA256 := opts.useSHA256
@@ -365,7 +383,12 @@ func afterCandidates(opts *GenerateOptions) error {
 		return fmt.Errorf("failed to open repo: %w", err)
 	}
 
-	candidates, err := gitverify.AfterCandidates(repo, useSHA256)
+	repoConfig, _, err := loadRepoConfig(repo, opts.configFilePath, opts.repoUri)
+	if err != nil {
+		return fmt.Errorf("failed to load config: %w", err)
+	}
+
+	candidates, err := gitverify.AfterCandidates(repo, repoConfig, useSHA256)
 	if err != nil {
 		return fmt.Errorf("failed to find after candidates: %w", err)
 	}
@@ -392,6 +415,18 @@ func afterCandidates(opts *GenerateOptions) error {
 	}
 
 	sort.Slice(candidates, func(i, j int) bool {
+		if candidates[i].Branch != nil && candidates[j].Branch != nil {
+			return *candidates[i].Branch < *candidates[j].Branch
+		}
+
+		if candidates[i].Branch != nil {
+			return true
+		}
+
+		if candidates[j].Branch != nil {
+			return false
+		}
+
 		return *candidates[i].SHA1 < *candidates[j].SHA1
 	})
 
@@ -400,17 +435,19 @@ func afterCandidates(opts *GenerateOptions) error {
 		if found {
 			fmt.Printf("%s %s\n", *candidate.SHA1, strings.Join(refs, ","))
 
-			allBranches := hashset.New[string]()
-			var branchName string
-			for _, ref := range refs {
-				branchName, found = gitverify.BranchName(ref)
-				if found {
-					allBranches.Add(branchName)
+			if candidates[i].Branch == nil {
+				allBranches := hashset.New[string]()
+				var branchName string
+				for _, ref := range refs {
+					branchName, found = gitverify.BranchName(ref)
+					if found {
+						allBranches.Add(branchName)
+					}
 				}
-			}
 
-			if allBranches.Size() == 1 {
-				candidates[i].Branch = &allBranches.Values()[0]
+				if allBranches.Size() == 1 {
+					candidates[i].Branch = &allBranches.Values()[0]
+				}
 			}
 		}
 	}

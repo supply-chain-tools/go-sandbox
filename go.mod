@@ -5,6 +5,7 @@ go 1.22.5
 require (
 	github.com/go-git/go-git/v5 v5.12.0
 	github.com/google/go-github/v61 v61.0.0
+	golang.org/x/mod v0.21.0
 )
 
 require (

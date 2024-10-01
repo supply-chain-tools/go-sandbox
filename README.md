@@ -10,7 +10,8 @@ CLIs
  - [cmd/repofetch](cmd/repofetch) - fetch all repos for a GitHub user or org
  - [cmd/githash](cmd/githash) - compute git hashes with alternative hash functions
  - [cmd/gitverify](cmd/gitverify) - verify signatures and integrity of Git repositories
- 
+ - [cmd/gohash](cmd/gohash) - compute the hashes of Go packages in Git repositories
+
 Libraries
  - [search](search) - the Trie based search that powers `gitsearch`
  - [gitkit](gitkit) - a collection Git related functionality, including searching through Git history

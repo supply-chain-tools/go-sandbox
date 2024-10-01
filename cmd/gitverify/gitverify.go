@@ -48,6 +48,10 @@ VERIFY OPTIONS
                 verify that head points to the --branch.
 
 AFTER-CANDIDATES OPTIONS
+        --config-file
+                Config file to use.
+        --repository-uri
+                URI to the repository in the config file.
         --sha256
                 Output SHA-256 hashes in addition to SHA-1.
 

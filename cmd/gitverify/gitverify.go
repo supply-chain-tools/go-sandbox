@@ -320,7 +320,7 @@ func verify(opts *VerifyOptions) error {
 	var repoConfig *gitverify.RepoConfig
 	repoConfig, repoUri, err = loadRepoConfig(repo, configFilePath, repoUri)
 	if err != nil {
-		return errr
+		return err
 	}
 
 	err = gitverify.Verify(repo, state, repoConfig, sha1Hash, sha256Hash, validateOptions)

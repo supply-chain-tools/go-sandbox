@@ -1,0 +1,24 @@
+{
+  "_type": "https://supply-chain-tools.github.io/schemas/tag-metadata/v0.0",
+  "repositoryUri": "git+https://github.com/supply-chain-tools/go-sandbox.git",
+  "commitHash": {
+    "sha1": "1e857870e4dc105e89014d13350e9eecfed16d2e",
+    "sha256": "4fa974a3727a01ff05a48e577e9aca0269d195b134a2d0fc2f17f8c55bafc92f"
+  },
+  "previousTag": {
+    "sha1": "6d540beb68e251182b9897eb11c523d446d9a349",
+    "sha256": "1b62b8b21ddccd0448258f50b9092e80027490d1e589a755da904febb598ba31"
+  },
+  "protectedBranches": [
+    {
+      "name": "main",
+      "sha1": "7ca1b312d765fdccd0eff4623c09fb46e83551aa",
+      "sha256": "4fa974a3727a01ff05a48e577e9aca0269d195b134a2d0fc2f17f8c55bafc92f"
+    }
+  ],
+  "goRelease": {
+    "uri": "pkg:golang/github.com/supply-chain-tools/go-sandbox@v0.0.2",
+    "directoryHash": "h1:hS9l2gbi49xBG/p7FJHWx617jBFvnAabxEvA4p/Aqp4=",
+    "goModHash": "h1:rpMx5VkEw0ZJdk27NK6DPObmkfD3GlFK5XZh1lAWBiw="
+  }
+}

@@ -1,0 +1,61 @@
+{
+  "_type": "https://in-toto.io/Statement/v1",
+  "subject": [
+    {
+      "name": "tag",
+      "uri": "git+https://github.com/supply-chain-tools/go-sandbox.git@v0.0.1",
+      "digest": {
+        "gitTag": "8c1c56088d17425df00e2c3750d12c44d8478c68",
+        "gitTag_sha256": "b085c967c0a2b6312e4d99c725497fa3a8b0c72606bfb3970ddcad9bb403b32f"
+      }
+    }
+  ],
+  "predicateType": "https://in-toto.io/attestation/link/v0.3",
+  "predicate": {
+    "name": "tag",
+    "command": [
+      "git",
+      "tag",
+      "-s",
+      "-m",
+      "Release v0.0.1\n\nTag-metadata: eyJfdHlwZSI6Imh0dHBzOi8vc3VwcGx5LWNoYWluLXRvb2xzLmdpdGh1Yi5pby9zY2hlbWFzL3RhZy1tZXRhZGF0YS92MC4wIiwicmVwb3NpdG9yeVVyaSI6ImdpdCtodHRwczovL2dpdGh1Yi5jb20vc3VwcGx5LWNoYWluLXRvb2xzL2dvLXNhbmRib3guZ2l0IiwiY29tbWl0SGFzaCI6eyJzaGExIjoiMDgzZmQzZWM4MzJhZDhiOTZjMzFjNWQ3MTQ5ODA0NzcyMjUxY2VkMCIsInNoYTI1NiI6Ijk4YzA3MWY5YTBmZDZjZWM0ODQ3NDM3YTc2ZWRiMjQxZTJiNWVhNjIzOGMwNGUwNTY1OTJhNDJiZTE0MzY1YjkifSwicHJvdGVjdGVkQnJhbmNoZXMiOlt7Im5hbWUiOiJtYWluIiwic2hhMSI6IjdjYTFiMzEyZDc2NWZkY2NkMGVmZjQ2MjNjMDlmYjQ2ZTgzNTUxYWEiLCJzaGEyNTYiOiI5OGMwNzFmOWEwZmQ2Y2VjNDg0NzQzN2E3NmVkYjI0MWUyYjVlYTYyMzhjMDRlMDU2NTkyYTQyYmUxNDM2NWI5In1dLCJnb1JlbGVhc2UiOnsidXJpIjoicGtnOmdvbGFuZy9naXRodWIuY29tL3N1cHBseS1jaGFpbi10b29scy9nby1zYW5kYm94QHYwLjAuMSIsImRpcmVjdG9yeUhhc2giOiJoMTp4cXk5YWh2SWpIamtueDhZSjU4RUxKaGd5dU9DeWtGWm5rbkRQOVhPd3ZZPSIsImdvTW9kSGFzaCI6ImgxOnJwTXg1VmtFdzBaSmRrMjdOSzZEUE9ibWtmRDNHbEZLNVhaaDFsQVdCaXc9In19",
+      "v0.0.1",
+      "083fd3ec832ad8b96c31c5d7149804772251ced0"
+    ],
+    "materials": [
+      {
+        "name": "commit",
+        "uri": "git+https://github.com/supply-chain-tools/go-sandbox.git@083fd3ec832ad8b96c31c5d7149804772251ced0",
+        "digest": {
+          "gitCommit": "083fd3ec832ad8b96c31c5d7149804772251ced0",
+          "gitCommit_sha256": "98c071f9a0fd6cec4847437a76edb241e2b5ea6238c04e056592a42be14365b9"
+        }
+      },
+      {
+        "name": "refs/remotes/origin/main",
+        "uri": "git+https://github.com/supply-chain-tools/go-sandbox.git@main",
+        "digest": {
+          "gitCommit": "7ca1b312d765fdccd0eff4623c09fb46e83551aa",
+          "gitCommit_sha256": "98c071f9a0fd6cec4847437a76edb241e2b5ea6238c04e056592a42be14365b9"
+        }
+      },
+      {
+        "name": "goRelease",
+        "uri": "pkg:golang/github.com/supply-chain-tools/go-sandbox@v0.0.1",
+        "digest": {
+          "dirHash1": "c6acbd6a1bc88c78e49f1f18279f042c9860cae382ca41599e49c33fd5cec2f6"
+        }
+      },
+      {
+        "name": "goRelease#go.mod",
+        "uri": "pkg:golang/github.com/supply-chain-tools/go-sandbox@v0.0.1#go.mod",
+        "digest": {
+          "dirHash1": "ae9331e55904c34649764dbb34ae833ce6e691f0f71a514ae57661d65016062c"
+        }
+      }
+    ],
+    "environment": {
+      "timestamp": "2024-09-30T23:27:52+02:00"
+    }
+  }
+}

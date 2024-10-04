@@ -26,6 +26,7 @@ const usage = `Usage:
 
 Options:
     --keyfile      Path to SSH private key to use
+    --init         Initialise if no other tags should exist
     --debug        Enable debug logging
     -h, --help     Show help message`
 

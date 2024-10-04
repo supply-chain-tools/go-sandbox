@@ -390,6 +390,9 @@ func FindPreviousTag(repo *git.Repository) (*object.Tag, bool, error) {
 
 	count := 0
 	for hash, tag := range tagHashes {
+		// When we find a tag not pointed to by others we have a latest tag
+		// candidate. There may be more tags with metadata, which should
+		// not happen, so we keep track with a count.
 		if _, found := previousTagHashes[hash]; !found {
 			previousTag = tag
 			count++

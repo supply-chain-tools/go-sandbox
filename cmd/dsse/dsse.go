@@ -223,9 +223,14 @@ func signAndWrite(DSSEPath string, envelope *gitrelease.Envelope, keyfilePath st
 		return err
 	}
 
-	signature, err := sign(existing, keyfilePath)
-	if err != nil {
-		return err
+	signature, errors := sign(existing, keyfilePath)
+	if len(errors) > 0 {
+		allErrors := ""
+		for _, err := range errors {
+			allErrors += err.Error() + ";"
+		}
+
+		return fmt.Errorf("failed to sign file: %s", allErrors)
 	}
 
 	envelope.Signatures = append(envelope.Signatures, gitrelease.Signature{
@@ -265,24 +270,35 @@ func printPayload(envelope *gitrelease.Envelope) error {
 	return nil
 }
 
-func sign(payload []byte, keyfilePath string) (string, error) {
+func sign(payload []byte, keyfilePath string) (signedPayload string, errors []error) {
 	preAuthenticationEncoding, err := gitrelease.PreAuthenticationEncoding(payload)
 	if err != nil {
-		return "", fmt.Errorf("unable to create signature payload: %w", err)
+		errors = append(errors, fmt.Errorf("unable to create signature payload: %w", err))
+		return "", errors
 	}
 
 	tmpFile, err := os.CreateTemp("", "payload")
 	if err != nil {
-		return "", fmt.Errorf("unable to create temporary file: %w", err)
+		errors = append(errors, fmt.Errorf("unable to create temporary file: %w", err))
+		return "", errors
 	}
+
+	defer func() {
+		err := os.Remove(tmpFile.Name())
+		if err != nil {
+			errors = append(errors, fmt.Errorf("unable to delete temporary file %s: %w", tmpFile.Name(), err))
+		}
+	}()
 
 	_, err = tmpFile.Write(preAuthenticationEncoding)
 	if err != nil {
-		return "", fmt.Errorf("unable to write to temporary file: %w", err)
+		errors = append(errors, fmt.Errorf("unable to write to temporary file: %w", err))
+		return "", errors
 	}
 	err = tmpFile.Sync()
 	if err != nil {
-		return "", fmt.Errorf("unable to sync temporary file: %w", err)
+		errors = append(errors, fmt.Errorf("unable to sync temporary file: %w", err))
+		return "", errors
 	}
 
 	command := []string{"ssh-keygen", "-Y", "sign", "-n", sshNamespace, "-f", keyfilePath, tmpFile.Name()}
@@ -294,26 +310,24 @@ func sign(payload []byte, keyfilePath string) (string, error) {
 
 	err = cmd.Run()
 	if err != nil {
-		return "", err
+		errors = append(errors, err)
+		return "", errors
 	}
 
 	signatureFile := tmpFile.Name() + ".sig"
+	defer func() {
+		err = os.Remove(tmpFile.Name() + ".sig")
+		if err != nil {
+			errors = append(errors, fmt.Errorf("unable to delete temporary signature %s: %w", signatureFile, err))
+		}
+	}()
+
 	sig, err := os.ReadFile(signatureFile)
 	if err != nil {
-		return "", fmt.Errorf("unable to read signature from %s: %w", signatureFile, err)
+		errors = append(errors, fmt.Errorf("unable to read signature from %s: %w", signatureFile, err))
+		return "", errors
 	}
 
 	signature := base64.StdEncoding.EncodeToString(sig)
-
-	err = os.Remove(tmpFile.Name())
-	if err != nil {
-		return "", fmt.Errorf("unable to delete temporary file %s: %w", tmpFile.Name(), err)
-	}
-
-	err = os.Remove(tmpFile.Name() + ".sig")
-	if err != nil {
-		return "", fmt.Errorf("unable to delete temporary signature %s: %w", signatureFile, err)
-	}
-
-	return signature, nil
+	return signature, errors
 }

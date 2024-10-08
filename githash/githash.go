@@ -106,6 +106,21 @@ func (gh *gitHash) commitContent(commit *object.Commit) (string, error) {
 	sb.WriteString(fmt.Sprintf("author %s <%s> %d %s\n", commit.Author.Name, commit.Author.Email, commit.Author.When.Unix(), commit.Author.When.Format("-0700")))
 	sb.WriteString(fmt.Sprintf("committer %s <%s> %d %s\n", commit.Committer.Name, commit.Committer.Email, commit.Committer.When.Unix(), commit.Committer.When.Format("-0700")))
 
+	if commit.MergeTag != "" {
+		parts := strings.Split(commit.MergeTag, "\n")
+
+		sb.WriteString("mergetag")
+		for i := 0; i < len(parts)-1; i++ {
+			sb.WriteString(" ")
+			sb.WriteString(parts[i])
+			sb.WriteString("\n")
+		}
+
+		if parts[len(parts)-1] != "" {
+			return "", fmt.Errorf("expected empty last line in mergetag, got '%s'", parts[len(parts)-1])
+		}
+	}
+
 	if commit.PGPSignature != "" {
 		gpgContent, err := gpgSigString(commit)
 		if err != nil {

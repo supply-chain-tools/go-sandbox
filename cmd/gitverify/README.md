@@ -124,8 +124,5 @@ Run gc
 git gc --prune=now
 ```
 
-### Merge Tags
-Currently not supported.
-
 ### Tags not pointing to commits
 Currently not supported.

@@ -352,9 +352,8 @@ func verifyConnectedToAfter(c *object.Commit, state *gitkit.RepoState, commitMet
 	// Verify that commit is connected to after (otherwise the commits might not be in the right repository)
 	// The commit can be connected to after by being a descendant of an ignored commit or by being an ignored commit
 
-	queue := []*object.Commit{c}
 	if !commitMetadata[c.Hash].Ignore {
-		queue = []*object.Commit{c}
+		queue := []*object.Commit{c}
 
 		for {
 			if len(queue) == 0 {

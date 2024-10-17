@@ -169,9 +169,18 @@ func validateOpts(opts *ValidateOptions, repo *git.Repository, state *gitkit.Rep
 		}
 	}
 
-	err = verifyConnectedToAfter(c, state, commitMetadata)
-	if err != nil {
-		return err
+	targetAfter, found := config.branchToSHA1[opts.Branch]
+	if found {
+		// there is a specific after connected to this branch in the config, look for that
+		err = verifyConnectedToSpecificAfter(c, targetAfter, state, commitMetadata)
+		if err != nil {
+			return err
+		}
+	} else {
+		err = verifyConnectedToAnyAfter(c, state, commitMetadata)
+		if err != nil {
+			return err
+		}
 	}
 
 	var tagHash *plumbing.Hash = nil
@@ -348,7 +357,63 @@ func validateCommitsRecursively(c *object.Commit, state *gitkit.RepoState, commi
 	return nil
 }
 
-func verifyConnectedToAfter(c *object.Commit, state *gitkit.RepoState, commitMetadata map[plumbing.Hash]*CommitData) error {
+func verifyConnectedToSpecificAfter(commit *object.Commit, after plumbing.Hash, state *gitkit.RepoState, commitMetadata map[plumbing.Hash]*CommitData) error {
+	if commit.Hash == after {
+		return nil
+	}
+
+	afterCommit, found := state.CommitMap[after]
+	if !found {
+		return fmt.Errorf("target after hash not found: %s", after)
+	}
+
+	// see if commit is a descendant of after
+	connected, err := isLeftDescendant(commit, afterCommit, state)
+	if err != nil {
+		return err
+	}
+
+	if connected {
+		return nil
+	}
+
+	// see if after is a descendant of commit
+	connected, err = isLeftDescendant(afterCommit, commit, state)
+	if err != nil {
+		return err
+	}
+
+	if !connected {
+		return fmt.Errorf("commit is not connected to after")
+	}
+
+	return nil
+}
+
+func isLeftDescendant(a *object.Commit, b *object.Commit, state *gitkit.RepoState) (bool, error) {
+	current := a
+
+	for {
+		if current.Hash == b.Hash {
+			return true, nil
+		}
+
+		if len(current.ParentHashes) == 0 {
+			return false, nil
+		}
+
+		parentHash := current.ParentHashes[0]
+
+		parent, found := state.CommitMap[parentHash]
+		if !found {
+			return false, fmt.Errorf("target parent hash not found: %s", parentHash)
+		}
+
+		current = parent
+	}
+}
+
+func verifyConnectedToAnyAfter(c *object.Commit, state *gitkit.RepoState, commitMetadata map[plumbing.Hash]*CommitData) error {
 	// Verify that commit is connected to after (otherwise the commits might not be in the right repository)
 	// The commit can be connected to after by being a descendant of an ignored commit or by being an ignored commit
 

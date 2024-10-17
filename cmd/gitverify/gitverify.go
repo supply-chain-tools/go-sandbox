@@ -189,12 +189,20 @@ func parseVerifyOptions(osArgs []string) (*VerifyOptions, error) {
 		return nil, err
 	}
 
-	if verifyOnHEAD && commit == "" && tag == "" && branch == "" {
-		return nil, fmt.Errorf("when using --verify-head one or more of --commit, --tag and --branch must be specified")
+	if tag != "" && commit == "" {
+		return nil, fmt.Errorf("when using --tag, --commit must be specified")
 	}
 
-	if verifyOnTip && commit == "" && tag == "" {
-		return nil, fmt.Errorf("when using --verify-on-tip, --commit and/or --tag must be specified")
+	if branch != "" && commit == "" {
+		return nil, fmt.Errorf("when using --branch, --commit must be specified")
+	}
+
+	if verifyOnHEAD && commit == "" {
+		return nil, fmt.Errorf("when using --verify-head, --commit must be specified")
+	}
+
+	if verifyOnTip && commit == "" {
+		return nil, fmt.Errorf("when using --verify-on-tip, --commit must be specified")
 	}
 
 	if verifyOnTip && branch == "" {
@@ -218,6 +226,12 @@ func parseVerifyOptions(osArgs []string) (*VerifyOptions, error) {
 			return nil, fmt.Errorf("--repository-uri must be used with --config-file\n")
 		}
 
+		// TODO consider supporting local state
+		localState = false
+	}
+
+	if commit != "" {
+		// TODO consider supporting local state
 		localState = false
 	}
 

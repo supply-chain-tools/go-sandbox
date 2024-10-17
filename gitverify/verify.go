@@ -26,6 +26,11 @@ const hexSHA1Regex = "^[a-f0-9]{40}$"
 const hexSHA256Regex = "^[a-f0-9]{64}$"
 
 func Verify(repo *git.Repository, state *gitkit.RepoState, repoConfig *RepoConfig, gitHashSHA1 githash.GitHash, gitHashSHA256 githash.GitHash, opts *ValidateOptions) error {
+	commitMetadata, err := computeCommitMetadata(state, repoConfig, gitHashSHA1, gitHashSHA256)
+	if err != nil {
+		return err
+	}
+
 	if opts != nil && opts.Commit != "" {
 		matched, err := regexp.MatchString(hexSHA1Regex, opts.Commit)
 		if err != nil {
@@ -35,108 +40,108 @@ func Verify(repo *git.Repository, state *gitkit.RepoState, repoConfig *RepoConfi
 		if !matched {
 			return fmt.Errorf("target commit must be a 40 character hex, not '%s'", opts.Commit)
 		}
-	}
 
-	commitMetadata, err := computeCommitMetadata(state, repoConfig, gitHashSHA1, gitHashSHA256)
-	if err != nil {
-		return err
-	}
-
-	for _, commit := range state.CommitMap {
-		metadata, found := commitMetadata[commit.Hash]
-		if !found {
-			return fmt.Errorf("commit not processed: %s", commit.Hash)
+		err = validateOpts(opts, repo, state, commitMetadata, repoConfig)
+		if err != nil {
+			return err
 		}
-
-		if metadata.Ignore {
-			continue
-		}
-
-		email := commit.Committer.Email
-
-		if repoConfig.forge != nil {
-			if repoConfig.forge.email == email {
-				err := validateGPGCommit(commit, repoConfig.forge.gpgPublicKey)
-				if err != nil {
-					return err
-				}
-
-				if !repoConfig.forge.allowMergeCommits && !repoConfig.forge.allowContentCommits {
-					return fmt.Errorf("forge is not allowed to make commits: %s", commit.Hash.String())
-				}
-
-				_, found := repoConfig.maintainerOrContributorEmails[commit.Author.Email]
-				if !found {
-					_, found := repoConfig.maintainerOrContributorForgeEmails[commit.Author.Email]
-					if !found {
-						return fmt.Errorf("author email '%s' not found for forge commit: %s", commit.Author.Email, commit.Hash.String())
-					}
-				}
-
-				if !repoConfig.forge.allowMergeCommits && len(commit.ParentHashes) > 1 {
-					return fmt.Errorf("up to one parent hash supported for forge: %s", commit.Hash.String())
-				}
-
-				if repoConfig.forge.allowMergeCommits && !repoConfig.forge.allowContentCommits {
-					err := verifyMergeCommitNoContentChanges(commit)
-					if err != nil {
-						return fmt.Errorf("failed to verify forge merge commit %s to not have content changes: %s", commit.Hash.String(), err)
-					}
-
-					metadata.VerifiedToNotHaveContentChanges = true
-				}
-
-				continue
-			}
-		}
-
-		id, found := repoConfig.maintainerOrContributorEmails[email]
-		if !found {
-			return fmt.Errorf("no maintainer with email '%s' for commit %s", email, commit.Hash)
-		}
-
-		switch metadata.SignatureType {
-		case SignatureTypeSSH:
-			content := buildContent(commit)
-			err := validateSSH(content, commit.PGPSignature, id, repoConfig)
-			if err != nil {
-				return fmt.Errorf("failed to validate commit %s: %w", commit.Hash.String(), err)
-			}
-		case SignatureTypeGPG:
-			err := validateIdentityGPGCommit(commit, id, repoConfig)
+	} else {
+		for _, commit := range state.CommitMap {
+			err := validateCommit(commit, commitMetadata, repoConfig)
 			if err != nil {
 				return err
 			}
-		case SignatureTypeNone:
-			return fmt.Errorf("unsigned commit: %s", commit.Hash.String())
-		default:
-			return fmt.Errorf("unknown signature type for commit: %s", commit.Hash.String())
 		}
-	}
 
-	err = validateTags(repo, state, repoConfig, gitHashSHA1, gitHashSHA256)
-	if err != nil {
-		return err
-	}
+		err = validateTags(repo, state, repoConfig, gitHashSHA1, gitHashSHA256)
+		if err != nil {
+			return err
+		}
 
-	err = validateProtectedBranches(repo, state, commitMetadata, repoConfig)
-	if err != nil {
-		return err
-	}
-
-	err = validateOpts(opts, repo, state, repoConfig)
-	if err != nil {
-		return err
+		err = validateProtectedBranches(repo, state, commitMetadata, repoConfig)
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil
 }
 
-func validateOpts(opts *ValidateOptions, repo *git.Repository, state *gitkit.RepoState, config *RepoConfig) error {
-	if config == nil {
+func validateCommit(commit *object.Commit, commitMetadata map[plumbing.Hash]*CommitData, repoConfig *RepoConfig) error {
+	metadata, found := commitMetadata[commit.Hash]
+	if !found {
+		return fmt.Errorf("commit not processed: %s", commit.Hash)
+	}
+
+	if metadata.Ignore {
 		return nil
 	}
 
+	email := commit.Committer.Email
+
+	if repoConfig.forge != nil {
+		if repoConfig.forge.email == email {
+			err := validateGPGCommit(commit, repoConfig.forge.gpgPublicKey)
+			if err != nil {
+				return err
+			}
+
+			if !repoConfig.forge.allowMergeCommits && !repoConfig.forge.allowContentCommits {
+				return fmt.Errorf("forge is not allowed to make commits: %s", commit.Hash.String())
+			}
+
+			_, found := repoConfig.maintainerOrContributorEmails[commit.Author.Email]
+			if !found {
+				_, found := repoConfig.maintainerOrContributorForgeEmails[commit.Author.Email]
+				if !found {
+					return fmt.Errorf("author email '%s' not found for forge commit: %s", commit.Author.Email, commit.Hash.String())
+				}
+			}
+
+			if !repoConfig.forge.allowMergeCommits && len(commit.ParentHashes) > 1 {
+				return fmt.Errorf("up to one parent hash supported for forge: %s", commit.Hash.String())
+			}
+
+			if repoConfig.forge.allowMergeCommits && !repoConfig.forge.allowContentCommits {
+				err := verifyMergeCommitNoContentChanges(commit)
+				if err != nil {
+					return fmt.Errorf("failed to verify forge merge commit %s to not have content changes: %s", commit.Hash.String(), err)
+				}
+
+				metadata.VerifiedToNotHaveContentChanges = true
+			}
+
+			return nil
+		}
+	}
+
+	id, found := repoConfig.maintainerOrContributorEmails[email]
+	if !found {
+		return fmt.Errorf("no maintainer with email '%s' for commit %s", email, commit.Hash)
+	}
+
+	switch metadata.SignatureType {
+	case SignatureTypeSSH:
+		content := buildContent(commit)
+		err := validateSSH(content, commit.PGPSignature, id, repoConfig)
+		if err != nil {
+			return fmt.Errorf("failed to validate commit %s: %w", commit.Hash.String(), err)
+		}
+	case SignatureTypeGPG:
+		err := validateIdentityGPGCommit(commit, id, repoConfig)
+		if err != nil {
+			return err
+		}
+	case SignatureTypeNone:
+		return fmt.Errorf("unsigned commit: %s", commit.Hash.String())
+	default:
+		return fmt.Errorf("unknown signature type for commit: %s", commit.Hash.String())
+	}
+
+	return nil
+}
+
+func validateOpts(opts *ValidateOptions, repo *git.Repository, state *gitkit.RepoState, commitMetadata map[plumbing.Hash]*CommitData, config *RepoConfig) error {
 	head, err := repo.Head()
 	if err != nil {
 		return err
@@ -144,56 +149,69 @@ func validateOpts(opts *ValidateOptions, repo *git.Repository, state *gitkit.Rep
 
 	headHash := head.Hash()
 
-	var commitHash *plumbing.Hash = nil
-	if opts.Commit != "" {
-		c, found := state.CommitMap[plumbing.NewHash(opts.Commit)]
-		if !found {
-			return fmt.Errorf("target commit '%s' not found", opts.Commit)
+	c, found := state.CommitMap[plumbing.NewHash(opts.Commit)]
+	if !found {
+		return fmt.Errorf("target commit '%s' not found", opts.Commit)
+	}
+
+	err = validateCommit(c, commitMetadata, config)
+	if err != nil {
+		return err
+	}
+
+	targetHash := c.Hash
+
+	if opts.VerifyOnHEAD {
+		if c.Hash != headHash {
+			return fmt.Errorf("HEAD does not point to the target commit %s", opts.Commit)
 		}
-		commitHash = &c.Hash
+	}
 
-		if opts.VerifyOnHEAD {
-			if c.Hash != headHash {
-				return fmt.Errorf("HEAD does not point to the target commit %s", opts.Commit)
-			}
+	visited := hashset.New[plumbing.Hash]()
+	visited.Add(c.Hash)
+	queue := []*object.Commit{c}
+
+	// Verify that all commits properly signed
+	// Verify that commit is connected to after (otherwise the commits might not be in the right repository)
+	// The commit can be connected to after by being a descendant of an ignored commit or by being an ignored commit
+	connectedToAfter := false
+
+	if commitMetadata[c.Hash].Ignore {
+		connectedToAfter = true
+	}
+
+	for {
+		if len(queue) == 0 {
+			break
 		}
 
-		afterSHA1Set := config.afterSHA1
-		if opts.Branch != "" {
-			hash, found := config.branchToSHA1[opts.Branch]
-			if found {
-				afterSHA1Set = hashset.New[plumbing.Hash](hash)
-			}
-		}
+		current := queue[0]
+		queue = queue[1:]
 
-		visited := hashset.New[plumbing.Hash]()
-		visited.Add(c.Hash)
-		queue := []*object.Commit{c}
+		for _, parentHash := range current.ParentHashes {
+			if !visited.Contains(parentHash) {
+				parent, found := state.CommitMap[parentHash]
+				if !found {
+					return fmt.Errorf("target parent hash not found: %s", parentHash)
+				}
 
-		for {
-			if len(queue) == 0 {
-				return fmt.Errorf("target commit %s is not a descendant of after", opts.Commit)
-			}
-
-			current := queue[0]
-			queue = queue[1:]
-
-			if afterSHA1Set.Contains(current.Hash) {
-				break
-			}
-
-			for _, parentHash := range current.ParentHashes {
-				if !visited.Contains(parentHash) {
-					parent, found := state.CommitMap[parentHash]
-					if !found {
-						return fmt.Errorf("target parent hash not found: %s", parentHash)
+				if !commitMetadata[parent.Hash].Ignore {
+					err = validateCommit(parent, commitMetadata, config)
+					if err != nil {
+						return err
 					}
 
 					queue = append(queue, parent)
 					visited.Add(parentHash)
+				} else {
+					connectedToAfter = true
 				}
 			}
 		}
+	}
+
+	if !connectedToAfter {
+		return fmt.Errorf("commit '%s' not connected to after", targetHash.String())
 	}
 
 	var tagHash *plumbing.Hash = nil
@@ -216,7 +234,7 @@ func validateOpts(opts *ValidateOptions, repo *git.Repository, state *gitkit.Rep
 						tagHash = &t.Target
 
 						if opts.VerifyOnHEAD {
-							if t.Target == headHash {
+							if t.Target != headHash {
 								return fmt.Errorf("HEAD does not point to the same commit %s as target tag '%s'", t.Target.String(), opts.Tag)
 							}
 						}
@@ -244,15 +262,10 @@ func validateOpts(opts *ValidateOptions, repo *git.Repository, state *gitkit.Rep
 		}
 	}
 
-	if commitHash != nil && tagHash != nil {
-		if *commitHash != *tagHash {
+	if tagHash != nil {
+		if targetHash != *tagHash {
 			return fmt.Errorf("target tag '%s' does not point to target commit '%s' ", opts.Tag, opts.Commit)
 		}
-	}
-
-	targetHash := commitHash
-	if targetHash == nil && tagHash != nil {
-		targetHash = tagHash
 	}
 
 	if opts.Branch != "" {
@@ -274,44 +287,42 @@ func validateOpts(opts *ValidateOptions, repo *git.Repository, state *gitkit.Rep
 						}
 					}
 
-					if targetHash != nil {
-						c, found := state.CommitMap[reference.Hash()]
-						if opts.VerifyOnTip {
-							if *targetHash != c.Hash {
-								return fmt.Errorf("target commit %s does not point to the tip of branch '%s'", targetHash.String(), opts.Branch)
+					c, found := state.CommitMap[reference.Hash()]
+					if opts.VerifyOnTip {
+						if targetHash != c.Hash {
+							return fmt.Errorf("target commit %s does not point to the tip of branch '%s'", targetHash.String(), opts.Branch)
+						}
+					} else {
+						// Verify that targetHash is on the branch
+						if !found {
+							return fmt.Errorf("commit '%s' not found", reference.Hash().String())
+						}
+
+						visited := hashset.New[plumbing.Hash]()
+						visited.Add(c.Hash)
+						queue := []*object.Commit{c}
+
+						for {
+							if len(queue) == 0 {
+								return fmt.Errorf("target commit %s is not on target branch '%s'", opts.Commit, opts.Branch)
 							}
-						} else {
-							// Verify that targetHash is on the branch
-							if !found {
-								return fmt.Errorf("commit '%s' not found", reference.Hash().String())
+
+							current := queue[0]
+							queue = queue[1:]
+
+							if current.Hash == targetHash {
+								break
 							}
 
-							visited := hashset.New[plumbing.Hash]()
-							visited.Add(c.Hash)
-							queue := []*object.Commit{c}
-
-							for {
-								if len(queue) == 0 {
-									return fmt.Errorf("target commit %s is not on target branch '%s'", opts.Commit, opts.Branch)
-								}
-
-								current := queue[0]
-								queue = queue[1:]
-
-								if current.Hash == *targetHash {
-									break
-								}
-
-								for _, parentHash := range current.ParentHashes {
-									if !visited.Contains(parentHash) {
-										parent, found := state.CommitMap[parentHash]
-										if !found {
-											return fmt.Errorf("target parent hash not found: %s", parentHash)
-										}
-
-										queue = append(queue, parent)
-										visited.Add(parentHash)
+							for _, parentHash := range current.ParentHashes {
+								if !visited.Contains(parentHash) {
+									parent, found := state.CommitMap[parentHash]
+									if !found {
+										return fmt.Errorf("target parent hash not found: %s", parentHash)
 									}
+
+									queue = append(queue, parent)
+									visited.Add(parentHash)
 								}
 							}
 						}

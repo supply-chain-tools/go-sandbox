@@ -183,26 +183,25 @@ func validateOpts(opts *ValidateOptions, repo *git.Repository, state *gitkit.Rep
 
 		tagFound := false
 		err = tags.ForEach(func(tag *plumbing.Reference) error {
-			entry := strings.TrimPrefix(tag.Name().String(), "refs/tags/")
+			tagName := strings.TrimPrefix(tag.Name().String(), "refs/tags/")
 
-			if entry == opts.Tag {
+			if tagName == opts.Tag {
 				err := validateTag(tag, state, config, gitHashSHA1, gitHashSHA256)
 				if err != nil {
 					return err
 				}
 
-				tagFound = true
-				if tagFound {
-					t, found := state.TagMap[tag.Hash()]
-					if found {
-						// annotated tag
-						tagHash = &t.Target
-					} else {
-						// lightweight tag
-						t := tag.Hash()
-						tagHash = &t
-					}
+				t, found := state.TagMap[tag.Hash()]
+				if found {
+					// annotated tag
+					tagHash = &t.Target
+				} else {
+					// lightweight tag
+					t := tag.Hash()
+					tagHash = &t
 				}
+
+				tagFound = true
 			}
 			return nil
 		})

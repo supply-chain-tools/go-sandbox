@@ -295,30 +295,28 @@ func validateOpts(opts *ValidateOptions, repo *git.Repository, state *gitkit.Rep
 
 		branchFound := false
 		err = remotes.ForEach(func(reference *plumbing.Reference) error {
-			if strings.HasPrefix(reference.Name().String(), "refs/heads/") {
-				branchName := reference.Name().Short()
+			prefix := "refs/remotes/origin/"
+			if strings.HasPrefix(reference.Name().String(), prefix) {
+				branchName := reference.Name().String()[len(prefix):]
 				if branchName == opts.Branch {
 					branchFound = true
 
-					if opts.VerifyOnHEAD {
-						if reference.Hash() != headHash {
-							return fmt.Errorf("HEAD does not point to target branch '%s'", opts.Branch)
-						}
+					c, found := state.CommitMap[reference.Hash()]
+					if !found {
+						return fmt.Errorf("commit '%s' not found", reference.Hash().String())
 					}
 
-					c, found := state.CommitMap[reference.Hash()]
+					err = validateCommit(c, commitMetadata, config)
+					if err != nil {
+						return err
+					}
+
 					if opts.VerifyOnTip {
 						if targetHash != c.Hash {
 							return fmt.Errorf("target commit %s does not point to the tip of branch '%s'", targetHash.String(), opts.Branch)
 						}
 					} else {
 						// Verify that targetHash is on the branch
-						if !found {
-							return fmt.Errorf("commit '%s' not found", reference.Hash().String())
-						}
-
-						visited := hashset.New[plumbing.Hash]()
-						visited.Add(c.Hash)
 						queue := []*object.Commit{c}
 
 						for {
@@ -333,15 +331,20 @@ func validateOpts(opts *ValidateOptions, repo *git.Repository, state *gitkit.Rep
 								break
 							}
 
-							for _, parentHash := range current.ParentHashes {
+							if len(current.ParentHashes) > 0 {
+								parentHash := current.ParentHashes[0]
 								if !visited.Contains(parentHash) {
 									parent, found := state.CommitMap[parentHash]
 									if !found {
 										return fmt.Errorf("target parent hash not found: %s", parentHash)
 									}
 
+									err = validateCommit(parent, commitMetadata, config)
+									if err != nil {
+										return err
+									}
+
 									queue = append(queue, parent)
-									visited.Add(parentHash)
 								}
 							}
 						}

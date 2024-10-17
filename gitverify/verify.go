@@ -167,18 +167,10 @@ func validateOpts(opts *ValidateOptions, repo *git.Repository, state *gitkit.Rep
 		}
 	}
 
+	// Verify that all commits properly signed
 	visited := hashset.New[plumbing.Hash]()
 	visited.Add(c.Hash)
 	queue := []*object.Commit{c}
-
-	// Verify that all commits properly signed
-	// Verify that commit is connected to after (otherwise the commits might not be in the right repository)
-	// The commit can be connected to after by being a descendant of an ignored commit or by being an ignored commit
-	connectedToAfter := false
-
-	if commitMetadata[c.Hash].Ignore {
-		connectedToAfter = true
-	}
 
 	for {
 		if len(queue) == 0 {
@@ -203,15 +195,37 @@ func validateOpts(opts *ValidateOptions, repo *git.Repository, state *gitkit.Rep
 
 					queue = append(queue, parent)
 					visited.Add(parentHash)
-				} else {
-					connectedToAfter = true
 				}
 			}
 		}
 	}
 
-	if !connectedToAfter {
-		return fmt.Errorf("commit '%s' not connected to after", targetHash.String())
+	// Verify that commit is connected to after (otherwise the commits might not be in the right repository)
+	// The commit can be connected to after by being a descendant of an ignored commit or by being an ignored commit
+	if !commitMetadata[c.Hash].Ignore {
+		queue = []*object.Commit{c}
+
+		for {
+			if len(queue) == 0 {
+				return fmt.Errorf("commit '%s' not connected to after", targetHash.String())
+			}
+
+			current := queue[0]
+			queue = queue[1:]
+
+			if len(current.ParentHashes) > 0 {
+				parentHash := current.ParentHashes[0]
+				if commitMetadata[parentHash].Ignore {
+					break
+				}
+
+				parent, found := state.CommitMap[parentHash]
+				if !found {
+					return fmt.Errorf("target parent hash not found: %s", parentHash)
+				}
+				queue = append(queue, parent)
+			}
+		}
 	}
 
 	var tagHash *plumbing.Hash = nil

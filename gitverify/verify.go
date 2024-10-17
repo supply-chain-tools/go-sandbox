@@ -156,7 +156,7 @@ func validateOpts(opts *ValidateOptions, repo *git.Repository, state *gitkit.Rep
 		return fmt.Errorf("target commit '%s' not found", opts.Commit)
 	}
 
-	err = validateCommit(c, commitMetadata, config)
+	err = validateCommitsRecursively(c, state, commitMetadata, config)
 	if err != nil {
 		return err
 	}
@@ -164,70 +164,14 @@ func validateOpts(opts *ValidateOptions, repo *git.Repository, state *gitkit.Rep
 	targetHash := c.Hash
 
 	if opts.VerifyOnHEAD {
-		if c.Hash != headHash {
+		if targetHash != headHash {
 			return fmt.Errorf("HEAD does not point to the target commit %s", opts.Commit)
 		}
 	}
 
-	// Verify that all commits properly signed
-	visited := hashset.New[plumbing.Hash]()
-	visited.Add(c.Hash)
-	queue := []*object.Commit{c}
-
-	for {
-		if len(queue) == 0 {
-			break
-		}
-
-		current := queue[0]
-		queue = queue[1:]
-
-		for _, parentHash := range current.ParentHashes {
-			if !visited.Contains(parentHash) {
-				parent, found := state.CommitMap[parentHash]
-				if !found {
-					return fmt.Errorf("target parent hash not found: %s", parentHash)
-				}
-
-				if !commitMetadata[parent.Hash].Ignore {
-					err = validateCommit(parent, commitMetadata, config)
-					if err != nil {
-						return err
-					}
-
-					queue = append(queue, parent)
-					visited.Add(parentHash)
-				}
-			}
-		}
-	}
-
-	// Verify that commit is connected to after (otherwise the commits might not be in the right repository)
-	// The commit can be connected to after by being a descendant of an ignored commit or by being an ignored commit
-	if !commitMetadata[c.Hash].Ignore {
-		queue = []*object.Commit{c}
-
-		for {
-			if len(queue) == 0 {
-				return fmt.Errorf("commit '%s' not connected to after", targetHash.String())
-			}
-
-			current := queue[0]
-			queue = queue[1:]
-
-			if len(current.ParentHashes) > 0 {
-				parentHash := current.ParentHashes[0]
-				if commitMetadata[parentHash].Ignore {
-					break
-				}
-
-				parent, found := state.CommitMap[parentHash]
-				if !found {
-					return fmt.Errorf("target parent hash not found: %s", parentHash)
-				}
-				queue = append(queue, parent)
-			}
-		}
+	err = verifyConnectedToAfter(c, state, commitMetadata)
+	if err != nil {
+		return err
 	}
 
 	var tagHash *plumbing.Hash = nil
@@ -253,22 +197,10 @@ func validateOpts(opts *ValidateOptions, repo *git.Repository, state *gitkit.Rep
 					if found {
 						// annotated tag
 						tagHash = &t.Target
-
-						if opts.VerifyOnHEAD {
-							if t.Target != headHash {
-								return fmt.Errorf("HEAD does not point to the same commit %s as target tag '%s'", t.Target.String(), opts.Tag)
-							}
-						}
 					} else {
 						// lightweight tag
 						t := tag.Hash()
 						tagHash = &t
-
-						if opts.VerifyOnHEAD {
-							if tag.Hash() != headHash {
-								return fmt.Errorf("HEAD does not point to the same commit %s as target tag '%s'", tag.Hash().String(), opts.Tag)
-							}
-						}
 					}
 				}
 			}
@@ -285,7 +217,7 @@ func validateOpts(opts *ValidateOptions, repo *git.Repository, state *gitkit.Rep
 
 	if tagHash != nil {
 		if targetHash != *tagHash {
-			return fmt.Errorf("target tag '%s' does not point to target commit '%s' ", opts.Tag, opts.Commit)
+			return fmt.Errorf("target tag '%s' does not point to target commit %s ", opts.Tag, targetHash)
 		}
 	}
 
@@ -303,6 +235,16 @@ func validateOpts(opts *ValidateOptions, repo *git.Repository, state *gitkit.Rep
 				if branchName == opts.Branch {
 					branchFound = true
 
+					c, found := state.CommitMap[reference.Hash()]
+					if !found {
+						return fmt.Errorf("commit '%s' not found", reference.Hash().String())
+					}
+
+					err := validateCommitsRecursively(c, state, commitMetadata, config)
+					if err != nil {
+						return err
+					}
+
 					isProtected, bn := isProtected(reference, config)
 					if isProtected {
 						err := validateProtectedBranch(reference, bn, state, commitMetadata, config)
@@ -311,55 +253,16 @@ func validateOpts(opts *ValidateOptions, repo *git.Repository, state *gitkit.Rep
 						}
 					}
 
-					c, found := state.CommitMap[reference.Hash()]
-					if !found {
-						return fmt.Errorf("commit '%s' not found", reference.Hash().String())
-					}
-
-					err = validateCommit(c, commitMetadata, config)
-					if err != nil {
-						return err
-					}
-
 					if opts.VerifyOnTip {
 						if targetHash != c.Hash {
 							return fmt.Errorf("target commit %s does not point to the tip of branch '%s'", targetHash.String(), opts.Branch)
 						}
 					} else {
-						// Verify that targetHash is on the branch
-						queue := []*object.Commit{c}
-
-						for {
-							if len(queue) == 0 {
-								return fmt.Errorf("target commit %s is not on target branch '%s'", opts.Commit, opts.Branch)
-							}
-
-							current := queue[0]
-							queue = queue[1:]
-
-							if current.Hash == targetHash {
-								break
-							}
-
-							if len(current.ParentHashes) > 0 {
-								parentHash := current.ParentHashes[0]
-								if !visited.Contains(parentHash) {
-									parent, found := state.CommitMap[parentHash]
-									if !found {
-										return fmt.Errorf("target parent hash not found: %s", parentHash)
-									}
-
-									err = validateCommit(parent, commitMetadata, config)
-									if err != nil {
-										return err
-									}
-
-									queue = append(queue, parent)
-								}
-							}
+						err = validateOnBranch(targetHash, branchName, c, state, commitMetadata, config)
+						if err != nil {
+							return err
 						}
 					}
-
 				}
 			}
 			return nil
@@ -370,6 +273,110 @@ func validateOpts(opts *ValidateOptions, repo *git.Repository, state *gitkit.Rep
 
 		if !branchFound {
 			return fmt.Errorf("target branch '%s' not found", opts.Branch)
+		}
+	}
+
+	return nil
+}
+
+func validateOnBranch(targetHash plumbing.Hash, branchName string, c *object.Commit, state *gitkit.RepoState, commitMetadata map[plumbing.Hash]*CommitData, config *RepoConfig) error {
+	current := c
+
+	for {
+		if current.Hash == targetHash {
+			break
+		}
+
+		if len(current.ParentHashes) == 0 {
+			return fmt.Errorf("target commit %s is not on target branch '%s'", targetHash, branchName)
+		}
+
+		parentHash := current.ParentHashes[0]
+		parent, found := state.CommitMap[parentHash]
+		if !found {
+			return fmt.Errorf("target parent hash not found: %s", parentHash)
+		}
+
+		err := validateCommit(parent, commitMetadata, config)
+		if err != nil {
+			return err
+		}
+
+		current = parent
+	}
+
+	return nil
+}
+
+func validateCommitsRecursively(c *object.Commit, state *gitkit.RepoState, commitMetadata map[plumbing.Hash]*CommitData, config *RepoConfig) error {
+	err := validateCommit(c, commitMetadata, config)
+	if err != nil {
+		return err
+	}
+
+	visited := hashset.New[plumbing.Hash]()
+	visited.Add(c.Hash)
+	queue := []*object.Commit{c}
+
+	for {
+		if len(queue) == 0 {
+			break
+		}
+
+		current := queue[0]
+		queue = queue[1:]
+
+		for _, parentHash := range current.ParentHashes {
+			if !visited.Contains(parentHash) {
+				parent, found := state.CommitMap[parentHash]
+				if !found {
+					return fmt.Errorf("target parent hash not found: %s", parentHash)
+				}
+
+				if !commitMetadata[parent.Hash].Ignore {
+					err := validateCommit(parent, commitMetadata, config)
+					if err != nil {
+						return err
+					}
+
+					queue = append(queue, parent)
+					visited.Add(parentHash)
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
+func verifyConnectedToAfter(c *object.Commit, state *gitkit.RepoState, commitMetadata map[plumbing.Hash]*CommitData) error {
+	// Verify that commit is connected to after (otherwise the commits might not be in the right repository)
+	// The commit can be connected to after by being a descendant of an ignored commit or by being an ignored commit
+
+	queue := []*object.Commit{c}
+	if !commitMetadata[c.Hash].Ignore {
+		queue = []*object.Commit{c}
+
+		for {
+			if len(queue) == 0 {
+				return fmt.Errorf("commit '%s' not connected to after", c.Hash.String())
+			}
+
+			current := queue[0]
+			queue = queue[1:]
+
+			if len(current.ParentHashes) > 0 {
+				parentHash := current.ParentHashes[0]
+				if commitMetadata[parentHash].Ignore {
+					break
+				}
+
+				parent, found := state.CommitMap[parentHash]
+				if !found {
+					return fmt.Errorf("target parent hash not found: %s", parentHash)
+				}
+				queue = append(queue, parent)
+			}
 		}
 	}
 

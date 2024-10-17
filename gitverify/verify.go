@@ -41,7 +41,7 @@ func Verify(repo *git.Repository, state *gitkit.RepoState, repoConfig *RepoConfi
 			return fmt.Errorf("target commit must be a 40 character hex, not '%s'", opts.Commit)
 		}
 
-		err = validateOpts(opts, repo, state, commitMetadata, repoConfig)
+		err = validateOpts(opts, repo, state, commitMetadata, repoConfig, gitHashSHA1, gitHashSHA256)
 		if err != nil {
 			return err
 		}
@@ -141,7 +141,7 @@ func validateCommit(commit *object.Commit, commitMetadata map[plumbing.Hash]*Com
 	return nil
 }
 
-func validateOpts(opts *ValidateOptions, repo *git.Repository, state *gitkit.RepoState, commitMetadata map[plumbing.Hash]*CommitData, config *RepoConfig) error {
+func validateOpts(opts *ValidateOptions, repo *git.Repository, state *gitkit.RepoState, commitMetadata map[plumbing.Hash]*CommitData, config *RepoConfig, gitHashSHA1 githash.GitHash, gitHashSHA256 githash.GitHash) error {
 	head, err := repo.Head()
 	if err != nil {
 		return err
@@ -226,6 +226,11 @@ func validateOpts(opts *ValidateOptions, repo *git.Repository, state *gitkit.Rep
 			entry := strings.TrimPrefix(tag.Name().String(), "refs/tags/")
 
 			if entry == opts.Tag {
+				err := validateTag(tag, state, config, gitHashSHA1, gitHashSHA256)
+				if err != nil {
+					return err
+				}
+
 				tagFound = true
 				if tagFound {
 					t, found := state.TagMap[tag.Hash()]
@@ -439,103 +444,97 @@ func validateTags(repo *git.Repository, state *gitkit.RepoState, repoConfig *Rep
 		return err
 	}
 
-	lightweightTags := make(map[plumbing.Hash]string)
-	annotatedTags := make(map[plumbing.Hash]*object.Tag)
-
 	err = tags.ForEach(func(tag *plumbing.Reference) error {
-		isExempted := false
-
-		tagHash, found := repoConfig.exemptedTags[tag.Name().String()]
-		if found {
-			if tagHash != tag.Hash().String() {
-				return fmt.Errorf("wrong hash.sha1 for exempted tag '%s', got %s, expected %s", tag.Name().String(), tag.Hash().String(), tagHash)
-			}
-			isExempted = true
-		}
-
-		t, isAnnotatedTag := state.TagMap[tag.Hash()]
-
-		tagHashSHA256, found := repoConfig.exemptedTagsSHA256[tag.Name().String()]
-		if found {
-			var sha256Hash []byte
-			var err error
-			if isAnnotatedTag {
-				sha256Hash, err = gitHashSHA256.TagSum(t.Hash)
-				if err != nil {
-					return err
-				}
-			} else {
-				sha256Hash, err = gitHashSHA256.CommitSum(tag.Hash())
-				if err != nil {
-					return err
-				}
-			}
-
-			h := hex.EncodeToString(sha256Hash)
-			if tagHashSHA256 != h {
-				return fmt.Errorf("wrong hash.sha256 for exempted tag '%s', got %s, expected %s", tag.Name().String(), h, tagHashSHA256)
-			}
-			isExempted = true
-		}
-
-		entry := strings.TrimPrefix(tag.Name().String(), "refs/tags/")
-		if isAnnotatedTag {
-			if entry != t.Name {
-				return fmt.Errorf("tag ref '%s' does not match name '%s'", entry, t.Name)
-			}
-
-			if !isExempted {
-				annotatedTags[tag.Hash()] = t
-			}
-		} else {
-			if !isExempted {
-				lightweightTags[tag.Hash()] = entry
-			}
-		}
-		return nil
+		return validateTag(tag, state, repoConfig, gitHashSHA1, gitHashSHA256)
 	})
 	if err != nil {
 		return err
 	}
 
-	for _, name := range lightweightTags {
-		if repoConfig.requireSignedTags {
-			return fmt.Errorf("tag '%s' is lightweight, but signing is required", name)
+	return nil
+}
+
+func validateTag(tag *plumbing.Reference, state *gitkit.RepoState, repoConfig *RepoConfig, gitHashSHA1 githash.GitHash, gitHashSHA256 githash.GitHash) error {
+	isExempted := false
+
+	tagHash, found := repoConfig.exemptedTags[tag.Name().String()]
+	if found {
+		if tagHash != tag.Hash().String() {
+			return fmt.Errorf("wrong hash.sha1 for exempted tag '%s', got %s, expected %s", tag.Name().String(), tag.Hash().String(), tagHash)
 		}
+		isExempted = true
 	}
 
-	for _, tag := range annotatedTags {
-		signatureType, err := inferSignatureType(tag.PGPSignature)
-		if err != nil {
-			return err
-		}
+	t, isAnnotatedTag := state.TagMap[tag.Hash()]
 
-		id, found := repoConfig.maintainerEmails[tag.Tagger.Email]
-		if !found {
-			return fmt.Errorf("no maintainer with email '%s' for tag %s", tag.Tagger.Email, tag.Name)
-		}
-
-		switch signatureType {
-		case SignatureTypeSSH:
-			content, err := tagContent(tag)
+	tagHashSHA256, found := repoConfig.exemptedTagsSHA256[tag.Name().String()]
+	if found {
+		var sha256Hash []byte
+		var err error
+		if isAnnotatedTag {
+			sha256Hash, err = gitHashSHA256.TagSum(t.Hash)
 			if err != nil {
 				return err
 			}
-			err = validateSSH(content, tag.PGPSignature, id, repoConfig)
-			if err != nil {
-				return fmt.Errorf("failed to validate tag %s: %w", tag.Name, err)
-			}
-		case SignatureTypeGPG:
-			err := validateIdentityGPGTag(tag, id, repoConfig)
+		} else {
+			sha256Hash, err = gitHashSHA256.CommitSum(tag.Hash())
 			if err != nil {
 				return err
 			}
-		case SignatureTypeNone:
-			if !repoConfig.requireSignedTags {
-				return fmt.Errorf("unsigned annotated tag: %s", tag.Name)
+		}
+
+		h := hex.EncodeToString(sha256Hash)
+		if tagHashSHA256 != h {
+			return fmt.Errorf("wrong hash.sha256 for exempted tag '%s', got %s, expected %s", tag.Name().String(), h, tagHashSHA256)
+		}
+		isExempted = true
+	}
+
+	entry := strings.TrimPrefix(tag.Name().String(), "refs/tags/")
+	if isAnnotatedTag {
+		if entry != t.Name {
+			return fmt.Errorf("tag ref '%s' does not match name '%s'", entry, t.Name)
+		}
+
+		if !isExempted {
+			signatureType, err := inferSignatureType(t.PGPSignature)
+			if err != nil {
+				return err
 			}
-		default:
-			return fmt.Errorf("unknown signature type for tag: %s", tag.Name)
+
+			id, found := repoConfig.maintainerEmails[t.Tagger.Email]
+			if !found {
+				return fmt.Errorf("no maintainer with email '%s' for tag %s", t.Tagger.Email, t.Name)
+			}
+
+			switch signatureType {
+			case SignatureTypeSSH:
+				content, err := tagContent(t)
+				if err != nil {
+					return err
+				}
+				err = validateSSH(content, t.PGPSignature, id, repoConfig)
+				if err != nil {
+					return fmt.Errorf("failed to validate tag %s: %w", t.Name, err)
+				}
+			case SignatureTypeGPG:
+				err := validateIdentityGPGTag(t, id, repoConfig)
+				if err != nil {
+					return err
+				}
+			case SignatureTypeNone:
+				if !repoConfig.requireSignedTags {
+					return fmt.Errorf("unsigned annotated tag: %s", t.Name)
+				}
+			default:
+				return fmt.Errorf("unknown signature type for tag: %s", t.Name)
+			}
+		}
+	} else {
+		if !isExempted {
+			if repoConfig.requireSignedTags {
+				return fmt.Errorf("tag '%s' is lightweight, but signing is required", tag.Name())
+			}
 		}
 	}
 

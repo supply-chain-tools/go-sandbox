@@ -73,7 +73,7 @@ func validateCommit(commit *object.Commit, commitMetadata map[plumbing.Hash]*Com
 		return fmt.Errorf("commit not processed: %s", commit.Hash)
 	}
 
-	if metadata.Ignore {
+	if metadata.Ignore || metadata.SignatureVerified {
 		return nil
 	}
 
@@ -137,6 +137,8 @@ func validateCommit(commit *object.Commit, commitMetadata map[plumbing.Hash]*Com
 	default:
 		return fmt.Errorf("unknown signature type for commit: %s", commit.Hash.String())
 	}
+
+	metadata.SignatureVerified = true
 
 	return nil
 }
@@ -301,6 +303,14 @@ func validateOpts(opts *ValidateOptions, repo *git.Repository, state *gitkit.Rep
 				if branchName == opts.Branch {
 					branchFound = true
 
+					isProtected, bn := isProtected(reference, config)
+					if isProtected {
+						err := validateProtectedBranch(reference, bn, state, commitMetadata, config)
+						if err != nil {
+							return err
+						}
+					}
+
 					c, found := state.CommitMap[reference.Hash()]
 					if !found {
 						return fmt.Errorf("commit '%s' not found", reference.Hash().String())
@@ -376,80 +386,93 @@ func validateProtectedBranches(repo *git.Repository, state *gitkit.RepoState, co
 		isProtected, branchName := isProtected(reference, config)
 
 		if isProtected {
-			targetAfter, found := config.branchToSHA1[branchName]
-			if !found {
-				return fmt.Errorf("protected branch '%s' without matching after branch", branchName)
-			}
-
-			current, found := state.CommitMap[reference.Hash()]
-			if !found {
-				return fmt.Errorf("did not find commit %s", reference.Hash().String())
-			}
-
-			for {
-				if current.Hash == targetAfter {
-					break
-				}
-
-				if config.requireMergeCommits {
-					if len(current.ParentHashes) != 2 {
-						return fmt.Errorf("requireMergeCommits is set, but commit %s on protected branch has %d parents", current.Hash.String(), len(current.ParentHashes))
-					}
-
-				}
-
-				if len(current.ParentHashes) == 2 {
-					_, found := config.maintainerEmails[current.Committer.Email]
-					if !found {
-						if config.forge != nil && current.Committer.Email == config.forge.email {
-							_, found = config.maintainerEmails[current.Author.Email]
-							if !found {
-								_, found = config.maintainerForgeEmails[current.Author.Email]
-							}
-						}
-
-						if !found {
-							return fmt.Errorf("merge commit %s made by %s which is not a maintainer", current.Hash.String(), current.Committer.Email)
-						}
-					}
-
-					metadata := commitMetadata[current.Hash]
-					if !metadata.VerifiedToNotHaveContentChanges {
-						err := verifyMergeCommitNoContentChanges(current)
-						if err != nil {
-							return fmt.Errorf("failed to verify protected merge commit %s to not have content changes: %s", current.Hash.String(), err)
-						}
-
-						metadata.VerifiedToNotHaveContentChanges = true
-					}
-
-					if config.requireUpToDate {
-						mergeBase, err := gitMergeBase(current.ParentHashes[0].String(), current.ParentHashes[1].String())
-						if err != nil {
-							return fmt.Errorf("failed to find merge base for parent commits of %s: %w", current.Hash.String(), err)
-						}
-
-						if mergeBase != current.ParentHashes[0].String() {
-							return fmt.Errorf("second parent of %s is not up to date with first", current.Hash.String())
-						}
-					}
-				}
-
-				if len(current.ParentHashes) == 0 {
-					return fmt.Errorf("protected branch %s is not a decendant of after", reference.Name().String())
-				}
-
-				current, found = state.CommitMap[current.ParentHashes[0]]
-				if !found {
-					return fmt.Errorf("did not find commit %s", reference.Hash().String())
-				}
+			err := validateProtectedBranch(reference, branchName, state, commitMetadata, config)
+			if err != nil {
+				return err
 			}
 		}
 		return nil
 	})
-
 	if err != nil {
 		return err
+	}
+
+	return nil
+}
+
+func validateProtectedBranch(reference *plumbing.Reference, branchName string, state *gitkit.RepoState, commitMetadata map[plumbing.Hash]*CommitData, config *RepoConfig) error {
+	targetAfter, found := config.branchToSHA1[branchName]
+	if !found {
+		return fmt.Errorf("protected branch '%s' without matching after branch", branchName)
+	}
+
+	current, found := state.CommitMap[reference.Hash()]
+	if !found {
+		return fmt.Errorf("did not find commit %s", reference.Hash().String())
+	}
+
+	for {
+		err := validateCommit(current, commitMetadata, config)
+		if err != nil {
+			return err
+		}
+
+		if current.Hash == targetAfter {
+			break
+		}
+
+		if config.requireMergeCommits {
+			if len(current.ParentHashes) != 2 {
+				return fmt.Errorf("requireMergeCommits is set, but commit %s on protected branch has %d parents", current.Hash.String(), len(current.ParentHashes))
+			}
+
+		}
+
+		if len(current.ParentHashes) == 2 {
+			_, found := config.maintainerEmails[current.Committer.Email]
+			if !found {
+				if config.forge != nil && current.Committer.Email == config.forge.email {
+					_, found = config.maintainerEmails[current.Author.Email]
+					if !found {
+						_, found = config.maintainerForgeEmails[current.Author.Email]
+					}
+				}
+
+				if !found {
+					return fmt.Errorf("merge commit %s made by %s which is not a maintainer", current.Hash.String(), current.Committer.Email)
+				}
+			}
+
+			metadata := commitMetadata[current.Hash]
+			if !metadata.VerifiedToNotHaveContentChanges {
+				err := verifyMergeCommitNoContentChanges(current)
+				if err != nil {
+					return fmt.Errorf("failed to verify protected merge commit %s to not have content changes: %s", current.Hash.String(), err)
+				}
+
+				metadata.VerifiedToNotHaveContentChanges = true
+			}
+
+			if config.requireUpToDate {
+				mergeBase, err := gitMergeBase(current.ParentHashes[0].String(), current.ParentHashes[1].String())
+				if err != nil {
+					return fmt.Errorf("failed to find merge base for parent commits of %s: %w", current.Hash.String(), err)
+				}
+
+				if mergeBase != current.ParentHashes[0].String() {
+					return fmt.Errorf("second parent of %s is not up to date with first", current.Hash.String())
+				}
+			}
+		}
+
+		if len(current.ParentHashes) == 0 {
+			return fmt.Errorf("protected branch %s is not a decendant of after", reference.Name().String())
+		}
+
+		current, found = state.CommitMap[current.ParentHashes[0]]
+		if !found {
+			return fmt.Errorf("did not find commit %s", reference.Hash().String())
+		}
 	}
 
 	return nil

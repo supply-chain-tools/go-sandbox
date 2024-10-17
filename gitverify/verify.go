@@ -172,12 +172,12 @@ func validateOpts(opts *ValidateOptions, repo *git.Repository, state *gitkit.Rep
 	targetAfter, found := config.branchToSHA1[opts.Branch]
 	if found {
 		// there is a specific after connected to this branch in the config, look for that
-		err = verifyConnectedToSpecificAfter(c, targetAfter, state, commitMetadata)
+		err = verifyConnectedToSpecificAfter(c, targetAfter, state, !opts.VerifyOnTip)
 		if err != nil {
 			return err
 		}
 	} else {
-		err = verifyConnectedToAnyAfter(c, state, commitMetadata)
+		err = verifyConnectedToAnyAfter(c, state, commitMetadata, config, !opts.VerifyOnTip)
 		if err != nil {
 			return err
 		}
@@ -257,7 +257,7 @@ func validateOpts(opts *ValidateOptions, repo *git.Repository, state *gitkit.Rep
 					if isProtected {
 						err := validateProtectedBranch(reference, bn, state, commitMetadata, config)
 						if err != nil {
-							return err
+							return fmt.Errorf("failed to validate protected branch rules: %w", err)
 						}
 					}
 
@@ -357,14 +357,14 @@ func validateCommitsRecursively(c *object.Commit, state *gitkit.RepoState, commi
 	return nil
 }
 
-func verifyConnectedToSpecificAfter(commit *object.Commit, after plumbing.Hash, state *gitkit.RepoState, commitMetadata map[plumbing.Hash]*CommitData) error {
+func verifyConnectedToSpecificAfter(commit *object.Commit, after plumbing.Hash, state *gitkit.RepoState, allowCommitsBeforeAfter bool) error {
 	if commit.Hash == after {
 		return nil
 	}
 
 	afterCommit, found := state.CommitMap[after]
 	if !found {
-		return fmt.Errorf("target after hash not found: %s", after)
+		return fmt.Errorf("target after hash not found: %s", after.String())
 	}
 
 	// see if commit is a descendant of after
@@ -377,6 +377,10 @@ func verifyConnectedToSpecificAfter(commit *object.Commit, after plumbing.Hash, 
 		return nil
 	}
 
+	if !allowCommitsBeforeAfter {
+		return fmt.Errorf("commit %s is not a descendant of after %s", commit.Hash.String(), after.String())
+	}
+
 	// see if after is a descendant of commit
 	connected, err = isLeftDescendant(afterCommit, commit, state)
 	if err != nil {
@@ -384,7 +388,7 @@ func verifyConnectedToSpecificAfter(commit *object.Commit, after plumbing.Hash, 
 	}
 
 	if !connected {
-		return fmt.Errorf("commit is not connected to after")
+		return fmt.Errorf("commit %s is not connected to after %s", commit.Hash.String(), after.String())
 	}
 
 	return nil
@@ -413,34 +417,38 @@ func isLeftDescendant(a *object.Commit, b *object.Commit, state *gitkit.RepoStat
 	}
 }
 
-func verifyConnectedToAnyAfter(c *object.Commit, state *gitkit.RepoState, commitMetadata map[plumbing.Hash]*CommitData) error {
+func verifyConnectedToAnyAfter(c *object.Commit, state *gitkit.RepoState, commitMetadata map[plumbing.Hash]*CommitData, config *RepoConfig, allowCommitsBeforeAfter bool) error {
 	// Verify that commit is connected to after (otherwise the commits might not be in the right repository)
 	// The commit can be connected to after by being a descendant of an ignored commit or by being an ignored commit
 
-	if !commitMetadata[c.Hash].Ignore {
-		queue := []*object.Commit{c}
+	// commit is an after
+	if config.afterSHA1.Contains(c.Hash) {
+		return nil
+	}
 
-		for {
-			if len(queue) == 0 {
-				return fmt.Errorf("commit '%s' not connected to after", c.Hash.String())
-			}
+	// commit is predecessor of after
+	if allowCommitsBeforeAfter && commitMetadata[c.Hash].Ignore {
+		return nil
+	}
 
-			current := queue[0]
-			queue = queue[1:]
-
-			if len(current.ParentHashes) > 0 {
-				parentHash := current.ParentHashes[0]
-				if commitMetadata[parentHash].Ignore {
-					break
-				}
-
-				parent, found := state.CommitMap[parentHash]
-				if !found {
-					return fmt.Errorf("target parent hash not found: %s", parentHash)
-				}
-				queue = append(queue, parent)
-			}
+	// commit is descendant of after
+	current := c
+	for {
+		if config.afterSHA1.Contains(current.Hash) {
+			break
 		}
+
+		if len(current.ParentHashes) == 0 {
+			return fmt.Errorf("commit %s not connected to after", c.Hash.String())
+		}
+
+		parentHash := current.ParentHashes[0]
+		parent, found := state.CommitMap[parentHash]
+		if !found {
+			return fmt.Errorf("target parent hash not found: %s", parentHash)
+		}
+
+		current = parent
 	}
 
 	return nil

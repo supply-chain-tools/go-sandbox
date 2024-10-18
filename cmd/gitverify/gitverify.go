@@ -37,15 +37,15 @@ VERIFY OPTIONS
         --repository-uri
                 URI to the repository in the config file.
         --commit
-                Verify that this commit is present.
+                Verify the commit.
         --tag
-                Verify that this commit is present.
+                Verify that the tag and that it points to --commit.
         --branch
-                Verify that --commit and/or --tag is present on branch.
+                Verify branch and ensure that --commit is on the branch.
         --verify-on-tip
-                Verify that --commit and/or --tag is at the tip of --branch.
+                Verify that --commit is at the tip of --branch.
         --verify-on-head
-                verify that head points to the --branch.
+                verify that HEAD points to the --commit. On by default.
 
 AFTER-CANDIDATES OPTIONS
         --config-file
@@ -155,7 +155,7 @@ func parseVerifyOptions(osArgs []string) (*VerifyOptions, error) {
 	flags.StringVar(&commit, "commit", "", "")
 	flags.StringVar(&tag, "tag", "", "")
 	flags.StringVar(&branch, "branch", "", "")
-	flags.BoolVar(&verifyOnHEAD, "verify-on-head", false, "")
+	flags.BoolVar(&verifyOnHEAD, "verify-on-head", true, "")
 	flags.BoolVar(&verifyOnTip, "verify-on-tip", false, "")
 
 	args := osArgs[1:]
@@ -195,6 +195,10 @@ func parseVerifyOptions(osArgs []string) (*VerifyOptions, error) {
 
 	if branch != "" && commit == "" {
 		return nil, fmt.Errorf("when using --branch, --commit must be specified")
+	}
+
+	if commit != "" && tag == "" && branch == "" {
+		return nil, fmt.Errorf("when using --commit, --branch or --tag must be specified")
 	}
 
 	if verifyOnHEAD && commit == "" {

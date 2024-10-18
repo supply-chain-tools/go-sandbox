@@ -201,10 +201,6 @@ func parseVerifyOptions(osArgs []string) (*VerifyOptions, error) {
 		return nil, fmt.Errorf("when using --commit, --branch or --tag must be specified")
 	}
 
-	if verifyOnHEAD && commit == "" {
-		return nil, fmt.Errorf("when using --verify-head, --commit must be specified")
-	}
-
 	if verifyOnTip && commit == "" {
 		return nil, fmt.Errorf("when using --verify-on-tip, --commit must be specified")
 	}

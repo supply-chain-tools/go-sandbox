@@ -176,11 +176,6 @@ func validateOpts(opts *ValidateOptions, repo *git.Repository, state *gitkit.Rep
 		if err != nil {
 			return err
 		}
-	} else {
-		err = verifyConnectedToAnyAfter(c, state, commitMetadata, config, !opts.VerifyOnTip)
-		if err != nil {
-			return err
-		}
 	}
 
 	var tagHash *plumbing.Hash = nil
@@ -412,43 +407,6 @@ func isLeftDescendant(a *object.Commit, b *object.Commit, state *gitkit.RepoStat
 
 		current = parent
 	}
-}
-
-func verifyConnectedToAnyAfter(c *object.Commit, state *gitkit.RepoState, commitMetadata map[plumbing.Hash]*CommitData, config *RepoConfig, allowCommitsBeforeAfter bool) error {
-	// Verify that commit is connected to after (otherwise the commits might not be in the right repository)
-	// The commit can be connected to after by being a descendant of an ignored commit or by being an ignored commit
-
-	// commit is an after
-	if config.afterSHA1.Contains(c.Hash) {
-		return nil
-	}
-
-	// commit is predecessor of after
-	if allowCommitsBeforeAfter && commitMetadata[c.Hash].Ignore {
-		return nil
-	}
-
-	// commit is descendant of after
-	current := c
-	for {
-		if config.afterSHA1.Contains(current.Hash) {
-			break
-		}
-
-		if len(current.ParentHashes) == 0 {
-			return fmt.Errorf("commit %s not connected to after", c.Hash.String())
-		}
-
-		parentHash := current.ParentHashes[0]
-		parent, found := state.CommitMap[parentHash]
-		if !found {
-			return fmt.Errorf("target parent hash not found: %s", parentHash)
-		}
-
-		current = parent
-	}
-
-	return nil
 }
 
 func validateProtectedBranches(repo *git.Repository, state *gitkit.RepoState, commitMetadata map[plumbing.Hash]*CommitData, config *RepoConfig) error {

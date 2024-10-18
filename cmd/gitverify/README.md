@@ -36,23 +36,19 @@ See [config.md](config.md).
 
 ## Command line
 
-### Verify that expected commit, tag, and/or branch is present
-
-To verify that a `commit`, `tag` and/or `branch` exist in the repository
+### Verify a specific commit, tag, and/or branch
+To verify a `commit`, `tag` and/or `branch` follows the rules and is pointed to by `HEAD`:
 ```sh
 gitverify --commit 1f46f2053221c040ce5bcba0239bc09214a37658 --tag v0.0.1 --branch main
 ```
-If `commit` and `tag` are both specified, they are verified to point to the same commit. If `branch` is specified
-and at least one of `commit` and `tag` is specified, the commit they point to is verified to be present in the `branch`.
+When using this, `--commit` is required along with either `--tag` or `--branch`.
+ - `--tag` verifies the tag and that is points to `commit`.
+ - `--branch` verifies that the `commit` is on the `branch`. If `branch` is a `protectedBranch` then those rules will also be verified.
+ - `--verify-at-tip` can be added to verify that the `commit` is at the tip of the `branch`.
+ - Use `--verify-on-head=false` to only verify the relevant state without verifying that `HEAD` is pointing to it.
 
-`--verify-at-tip` can be added to verify that `--commit/--tag` is at the tip of `--branch`.
-
-### Verify that expected commit, tag, and/or branch is pointed to by HEAD
-
-To verify that a `commit`, `tag` and/or `branch` is what `HEAD` points to
-```sh
-gitverify --commit 1f46f2053221c040ce5bcba0239bc09214a37658 --tag v0.0.1 --branch main --verify-on-head
-```
+This will only verify the relevant subset of data in the repository. I.e. this check can succeed even if there are
+other `commits`, `tags` and `branches` that would not validate.
 
 ## Threat Model
 See [threat-model.md](threat-model.md).

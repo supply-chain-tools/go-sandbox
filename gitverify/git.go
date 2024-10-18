@@ -30,6 +30,7 @@ type CommitData struct {
 	SignatureType                   SignatureType
 	Ignore                          bool
 	VerifiedToNotHaveContentChanges bool
+	SignatureVerified               bool
 }
 
 func InferForgeOrgAndRepo(repo *git.Repository) (forge string, org string, repoName string) {

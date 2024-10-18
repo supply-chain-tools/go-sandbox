@@ -39,7 +39,7 @@ VERIFY OPTIONS
         --commit
                 Verify the commit.
         --tag
-                Verify that the tag and that it points to --commit.
+                Verify the tag and that it points to --commit.
         --branch
                 Verify branch and ensure that --commit is on the branch.
         --verify-on-tip

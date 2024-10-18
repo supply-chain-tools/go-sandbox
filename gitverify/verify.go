@@ -255,13 +255,13 @@ func validateOpts(opts *ValidateOptions, repo *git.Repository, state *gitkit.Rep
 				if isProtected {
 					err := validateProtectedBranch(reference, branchName, state, commitMetadata, config)
 					if err != nil {
-						return fmt.Errorf("failed to validate protected branch rules: %w", err)
+						return fmt.Errorf("failed to validate protected branch '%s' rules: %w", reference.Name(), err)
 					}
 				}
 
 				if opts.VerifyOnTip {
 					if targetHash != c.Hash {
-						return fmt.Errorf("target commit %s does not point to the tip of branch '%s'", targetHash.String(), opts.Branch)
+						return fmt.Errorf("target commit %s does not point to the tip of branch '%s'", targetHash.String(), reference.Name())
 					}
 				} else {
 					err = validateOnBranch(targetHash, branchName, c, state, commitMetadata, config)

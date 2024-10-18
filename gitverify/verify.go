@@ -237,39 +237,36 @@ func validateOpts(opts *ValidateOptions, repo *git.Repository, state *gitkit.Rep
 
 		branchFound := false
 		err = remotes.ForEach(func(reference *plumbing.Reference) error {
-			prefix := "refs/remotes/origin/"
-			if strings.HasPrefix(reference.Name().String(), prefix) {
-				branchName := reference.Name().String()[len(prefix):]
-				if branchName == opts.Branch {
-					branchFound = true
+			isProtected, branchName := isProtected(reference, config)
 
-					c, found := state.CommitMap[reference.Hash()]
-					if !found {
-						return fmt.Errorf("commit '%s' not found", reference.Hash().String())
+			if branchName == opts.Branch {
+				branchFound = true
+
+				c, found := state.CommitMap[reference.Hash()]
+				if !found {
+					return fmt.Errorf("commit '%s' not found", reference.Hash().String())
+				}
+
+				err := validateCommitsRecursively(c, state, commitMetadata, config)
+				if err != nil {
+					return err
+				}
+
+				if isProtected {
+					err := validateProtectedBranch(reference, branchName, state, commitMetadata, config)
+					if err != nil {
+						return fmt.Errorf("failed to validate protected branch rules: %w", err)
 					}
+				}
 
-					err := validateCommitsRecursively(c, state, commitMetadata, config)
+				if opts.VerifyOnTip {
+					if targetHash != c.Hash {
+						return fmt.Errorf("target commit %s does not point to the tip of branch '%s'", targetHash.String(), opts.Branch)
+					}
+				} else {
+					err = validateOnBranch(targetHash, branchName, c, state, commitMetadata, config)
 					if err != nil {
 						return err
-					}
-
-					isProtected, bn := isProtected(reference, config)
-					if isProtected {
-						err := validateProtectedBranch(reference, bn, state, commitMetadata, config)
-						if err != nil {
-							return fmt.Errorf("failed to validate protected branch rules: %w", err)
-						}
-					}
-
-					if opts.VerifyOnTip {
-						if targetHash != c.Hash {
-							return fmt.Errorf("target commit %s does not point to the tip of branch '%s'", targetHash.String(), opts.Branch)
-						}
-					} else {
-						err = validateOnBranch(targetHash, branchName, c, state, commitMetadata, config)
-						if err != nil {
-							return err
-						}
 					}
 				}
 			}

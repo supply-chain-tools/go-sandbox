@@ -169,15 +169,6 @@ func validateOpts(opts *ValidateOptions, repo *git.Repository, state *gitkit.Rep
 		}
 	}
 
-	targetAfter, found := config.branchToSHA1[opts.Branch]
-	if found {
-		// there is a specific after connected to this branch in the config, look for that
-		err = verifyConnectedToSpecificAfter(c, targetAfter, state, !opts.VerifyOnTip)
-		if err != nil {
-			return err
-		}
-	}
-
 	var tagHash *plumbing.Hash = nil
 	if opts.Tag != "" {
 		tags, err := repo.Tags()

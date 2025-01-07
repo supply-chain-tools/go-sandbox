@@ -5,7 +5,12 @@
 ## Demo: validate this repo
 *For actual use the trust in the config file must be established before it can be used for validation.*
 ```sh
-$ gitverify --config-file ../../gitverify.json --repository-uri git+https://github.com/supply-chain-tools/go-sandbox.git
+curl https://raw.githubusercontent.com/supply-chain-tools/root-of-trust/refs/heads/main/gitverify.json --output gitverify.json
+```
+
+Verify
+```sh
+gitverify --config-file gitverify.json --repository-uri git+https://github.com/supply-chain-tools/go-sandbox.git
 validating...
 OK
 ```

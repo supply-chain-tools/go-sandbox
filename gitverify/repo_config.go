@@ -28,6 +28,7 @@ type RepoConfig struct {
 	allowSSHSignatures                 bool
 	requireSSHUserPresent              bool
 	requireSSHUserVerified             bool
+	allowSSHSHA256                     bool
 	allowGPGSignatures                 bool
 	requireSignedTags                  bool
 	requireMergeCommits                bool
@@ -291,6 +292,7 @@ func LoadRepoConfig(config *ParsedConfig, repoUri string) (*RepoConfig, error) {
 		allowSSHSignatures:                 repo.Rules.AllowSSHSignatures,
 		requireSSHUserPresent:              repo.Rules.RequireSSHUserPresent,
 		requireSSHUserVerified:             repo.Rules.RequireSSHUserVerified,
+		allowSSHSHA256:                     repo.Rules.AllowSSHSHA256,
 		allowGPGSignatures:                 repo.Rules.AllowGPGSignatures,
 		requireSignedTags:                  repo.Rules.RequireSignedTags,
 		requireMergeCommits:                repo.Rules.RequireMergeCommits,

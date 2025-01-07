@@ -45,6 +45,7 @@ type Rules struct {
 	AllowSSHSignatures     *bool `json:"allowSshSignatures"`
 	RequireSSHUserPresent  *bool `json:"requireSshUserPresent"`
 	RequireSSHUserVerified *bool `json:"requireSshUserVerified"`
+	AllowSSHSHA256         *bool `json:"allowSshSha256"`
 
 	AllowGPGSignatures *bool `json:"allowGpgSignatures"`
 
@@ -102,6 +103,7 @@ type ParsedRules struct {
 	AllowSSHSignatures     bool
 	RequireSSHUserPresent  bool
 	RequireSSHUserVerified bool
+	AllowSSHSHA256         bool
 
 	AllowGPGSignatures bool
 
@@ -215,6 +217,7 @@ func parseConfig(config *Config) (*ParsedConfig, error) {
 			AllowSSHSignatures:     false,
 			RequireSSHUserPresent:  true,
 			RequireSSHUserVerified: true,
+			AllowSSHSHA256:         false,
 			AllowGPGSignatures:     false,
 			RequireSignedTags:      true,
 			RequireMergeCommits:    true,
@@ -232,6 +235,10 @@ func parseConfig(config *Config) (*ParsedConfig, error) {
 
 			if rules.RequireSSHUserVerified != nil {
 				parsedRules.RequireSSHUserVerified = *rules.RequireSSHUserVerified
+			}
+
+			if rules.AllowSSHSHA256 != nil {
+				parsedRules.AllowSSHSHA256 = *rules.AllowSSHSHA256
 			}
 
 			if rules.AllowGPGSignatures != nil {

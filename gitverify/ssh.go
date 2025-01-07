@@ -31,7 +31,7 @@ func validateSSH(content string, signature string, identity identity, config *Re
 
 	trustedKey, found := identity.sshPublicKeys[sshSig.PublicKey]
 	if found {
-		err = verifySignature(*trustedKey, content, sshSig, namespaceSSH)
+		err = verifySignature(*trustedKey, content, sshSig, namespaceSSH, config.allowSSHSHA256)
 		if err != nil {
 			return err
 		}
@@ -66,7 +66,7 @@ func validateSSH(content string, signature string, identity identity, config *Re
 	return nil
 }
 
-func verifySSHSignature(key string, signature string, data string, namespace string) error {
+func verifySSHSignature(key string, signature string, data string, namespace string, allowSHA256 bool) error {
 	publicKey, err := decodeAndParseSSHPublicKey(key)
 	if err != nil {
 		return err
@@ -77,7 +77,7 @@ func verifySSHSignature(key string, signature string, data string, namespace str
 		return err
 	}
 
-	err = verifySignature(publicKey, data, sshSig, namespace)
+	err = verifySignature(publicKey, data, sshSig, namespace, allowSHA256)
 	if err != nil {
 		return err
 	}
@@ -120,11 +120,14 @@ func decodeAndParseSSHSignature(signature string) (*SSHSig, error) {
 	return sshSig, nil
 }
 
-func verifySignature(maintainerAllowedKey ssh.PublicKey, message string, signature *SSHSig, namespace string) error {
+func verifySignature(maintainerAllowedKey ssh.PublicKey, message string, signature *SSHSig, namespace string, allowSHA256 bool) error {
 	var h []byte
 
 	switch signature.HashAlgorithm {
 	case "sha256":
+		if !allowSHA256 {
+			return fmt.Errorf("hash algorithm SHA-256 not allowed for SSH")
+		}
 		r := sha256.Sum256([]byte(message))
 		h = r[:]
 	case "sha512":

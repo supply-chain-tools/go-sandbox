@@ -23,7 +23,7 @@ const usage = `Usage:
     githash [options] <commit>
 
 Options:
-    -a, --algorithm    Algorithm: sha1, sha256 (default), sha512, sha3-256, sha3-512, blake2b
+    -a, --algorithm    Algorithm: sha1, sha256, sha512 (default), sha3-256, sha3-512, blake2b
     -o, --object-type  Object type: commit (default), hash, blob, tag
     --debug            Enable debug logging
     -h, --help         Show help message`
@@ -81,7 +81,7 @@ func processOptionsAndArgs() (algorithm hash.Hash, objectType githash.ObjectType
 	var algorithmString, algorithmStringShort, typeString, typeStringShort string
 
 	const (
-		defaultAlgorithm = "sha256"
+		defaultAlgorithm = "sha512"
 		defaultType      = "commit"
 	)
 

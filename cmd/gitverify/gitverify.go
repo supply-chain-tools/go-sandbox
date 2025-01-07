@@ -2,7 +2,7 @@ package main
 
 import (
 	"crypto/sha1"
-	"crypto/sha256"
+	"crypto/sha512"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -52,12 +52,12 @@ AFTER-CANDIDATES OPTIONS
                 Config file to use.
         --repository-uri
                 URI to the repository in the config file.
-        --sha256
-                Output SHA-256 hashes in addition to SHA-1.
+        --sha512
+                Output SHA-512 hashes in addition to SHA-1.
 
 EXEMPT-TAGS OPTIONS
-        --sha256
-                Output SHA-256 hashes in addition to SHA-1.
+        --sha512
+                Output SHA-512 hashes in addition to SHA-1.
 
 GLOBAL OPTIONS
         --help, -h
@@ -246,17 +246,17 @@ func parseVerifyOptions(osArgs []string) (*VerifyOptions, error) {
 
 type GenerateOptions struct {
 	repoDir        string
-	useSHA256      bool
+	useSHA512      bool
 	configFilePath string
 	repoUri        string
 }
 
 func parseGenerateOptions(args []string) (*GenerateOptions, error) {
-	var debugMode, useSHA256, help, h bool
+	var debugMode, useSHA512, help, h bool
 	var configFilePath, repoUri string
 	flags := flag.NewFlagSet("generate", flag.ExitOnError)
 	flags.BoolVar(&debugMode, "debug", false, "")
-	flags.BoolVar(&useSHA256, "sha256", false, "")
+	flags.BoolVar(&useSHA512, "sha512", false, "")
 	flags.StringVar(&configFilePath, "config-file", "", "")
 	flags.StringVar(&repoUri, "repository-uri", "", "")
 
@@ -282,7 +282,7 @@ func parseGenerateOptions(args []string) (*GenerateOptions, error) {
 
 	return &GenerateOptions{
 		repoDir:        repoDir,
-		useSHA256:      useSHA256,
+		useSHA512:      useSHA512,
 		configFilePath: configFilePath,
 		repoUri:        repoUri,
 	}, nil
@@ -331,7 +331,7 @@ func verify(opts *VerifyOptions) error {
 
 	state := gitkit.LoadRepoState(repo)
 	sha1Hash := githash.NewGitHashFromRepoState(state, sha1.New())
-	sha256Hash := githash.NewGitHashFromRepoState(state, sha256.New())
+	sha512Hash := githash.NewGitHashFromRepoState(state, sha512.New())
 
 	var localStatePath string
 
@@ -341,7 +341,7 @@ func verify(opts *VerifyOptions) error {
 		return err
 	}
 
-	err = gitverify.Verify(repo, state, repoConfig, sha1Hash, sha256Hash, validateOptions)
+	err = gitverify.Verify(repo, state, repoConfig, sha1Hash, sha512Hash, validateOptions)
 	if err != nil {
 		return err
 	}
@@ -355,12 +355,12 @@ func verify(opts *VerifyOptions) error {
 			}
 		}
 
-		err = gitverify.VerifyLocalState(repo, state, repoConfig, repoUri, localStatePath, sha1Hash, sha256Hash)
+		err = gitverify.VerifyLocalState(repo, state, repoConfig, repoUri, localStatePath, sha1Hash, sha512Hash)
 		if err != nil {
 			return fmt.Errorf("failed to verify local state: %w", err)
 		}
 
-		err = gitverify.SaveLocalState(repo, state, repoConfig, repoUri, localStatePath, sha1Hash, sha256Hash)
+		err = gitverify.SaveLocalState(repo, state, repoConfig, repoUri, localStatePath, sha1Hash, sha512Hash)
 		if err != nil {
 			return fmt.Errorf("failed to save local state: %w", err)
 		}
@@ -398,7 +398,7 @@ func loadRepoConfig(repo *git.Repository, configFilePath string, inputRepoUri st
 
 func afterCandidates(opts *GenerateOptions) error {
 	repoDir := opts.repoDir
-	useSHA256 := opts.useSHA256
+	useSHA512 := opts.useSHA512
 
 	repo, err := gitkit.OpenRepoInLocalPath(repoDir)
 	if err != nil {
@@ -410,7 +410,7 @@ func afterCandidates(opts *GenerateOptions) error {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
 
-	candidates, err := gitverify.AfterCandidates(repo, repoConfig, useSHA256)
+	candidates, err := gitverify.AfterCandidates(repo, repoConfig, useSHA512)
 	if err != nil {
 		return fmt.Errorf("failed to find after candidates: %w", err)
 	}
@@ -485,7 +485,7 @@ func afterCandidates(opts *GenerateOptions) error {
 
 func exemptTags(opts *GenerateOptions) (string, error) {
 	repoDir := opts.repoDir
-	useSHA256 := opts.useSHA256
+	useSHA512 := opts.useSHA512
 
 	repo, err := gitkit.OpenRepoInLocalPath(repoDir)
 	if err != nil {
@@ -494,8 +494,8 @@ func exemptTags(opts *GenerateOptions) (string, error) {
 
 	state := gitkit.LoadRepoState(repo)
 	sha1Hash := githash.NewGitHashFromRepoState(state, sha1.New())
-	sha256Hash := githash.NewGitHashFromRepoState(state, sha256.New())
-	exemptTags, err := gitverify.ComputeExemptTags(repo, state, sha1Hash, sha256Hash, useSHA256)
+	sha512Hash := githash.NewGitHashFromRepoState(state, sha512.New())
+	exemptTags, err := gitverify.ComputeExemptTags(repo, state, sha1Hash, sha512Hash, useSHA512)
 	if err != nil {
 		return "", err
 	}

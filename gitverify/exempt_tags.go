@@ -14,7 +14,7 @@ type ExemptTag struct {
 	Hash Digests `json:"hash"`
 }
 
-func ComputeExemptTags(repo *git.Repository, state *gitkit.RepoState, gitHashSHA1 githash.GitHash, gitHashSHA256 githash.GitHash, useSHA256 bool) ([]ExemptTag, error) {
+func ComputeExemptTags(repo *git.Repository, state *gitkit.RepoState, gitHashSHA1 githash.GitHash, gitHashSHA512 githash.GitHash, useSHA512 bool) ([]ExemptTag, error) {
 	tags, err := repo.Tags()
 	if err != nil {
 		return nil, err
@@ -24,34 +24,34 @@ func ComputeExemptTags(repo *git.Repository, state *gitkit.RepoState, gitHashSHA
 	err = tags.ForEach(func(tag *plumbing.Reference) error {
 		hashSHA1 := tag.Hash().String()
 
-		var hexSHA256 *string = nil
-		if useSHA256 {
-			var hashSHA256 []byte = nil
+		var hexSHA512 *string = nil
+		if useSHA512 {
+			var hashSHA512 []byte = nil
 			var err error
 
 			t, found := state.TagMap[tag.Hash()]
 			if found {
 				// annotated tag
-				hashSHA256, err = gitHashSHA256.TagSum(t.Hash)
+				hashSHA512, err = gitHashSHA512.TagSum(t.Hash)
 				if err != nil {
 					return err
 				}
 			} else {
 				// lightweight tag
-				hashSHA256, err = gitHashSHA256.CommitSum(tag.Hash())
+				hashSHA512, err = gitHashSHA512.CommitSum(tag.Hash())
 				if err != nil {
 					return err
 				}
 			}
-			h := hex.EncodeToString(hashSHA256)
-			hexSHA256 = &h
+			h := hex.EncodeToString(hashSHA512)
+			hexSHA512 = &h
 		}
 
 		result = append(result, ExemptTag{
 			Ref: tag.Name().String(),
 			Hash: Digests{
 				SHA1:   &hashSHA1,
-				SHA256: hexSHA256,
+				SHA512: hexSHA512,
 			},
 		})
 		return nil

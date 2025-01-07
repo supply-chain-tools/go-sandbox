@@ -13,11 +13,11 @@ import (
 
 type RepoConfig struct {
 	afterSHA1                          hashset.Set[plumbing.Hash]
-	afterSHA256                        hashset.Set[[32]byte]
+	afterSHA512                        hashset.Set[[64]byte]
 	sha1ToBranch                       map[plumbing.Hash]string
 	branchToSHA1                       map[string]plumbing.Hash
-	sha256ToBranch                     map[[32]byte]string
-	afterSHA1ToSHA256                  map[plumbing.Hash][32]byte
+	sha512ToBranch                     map[[64]byte]string
+	afterSHA1ToSHA512                  map[plumbing.Hash][64]byte
 	maintainerEmails                   map[string]identity
 	contributorEmails                  map[string]identity
 	maintainerOrContributorEmails      map[string]identity
@@ -28,13 +28,14 @@ type RepoConfig struct {
 	allowSSHSignatures                 bool
 	requireSSHUserPresent              bool
 	requireSSHUserVerified             bool
+	allowSSHSHA256                     bool
 	allowGPGSignatures                 bool
 	requireSignedTags                  bool
 	requireMergeCommits                bool
 	requireUpToDate                    bool
 	protectedBranches                  hashset.Set[string]
 	exemptedTags                       map[string]string
-	exemptedTagsSHA256                 map[string]string
+	exemptedTagsSHA512                 map[string]string
 }
 
 type identity struct {
@@ -184,20 +185,20 @@ func LoadRepoConfig(config *ParsedConfig, repoUri string) (*RepoConfig, error) {
 	}
 
 	exemptedTagMap := make(map[string]string)
-	exemptedTagSHA256Map := make(map[string]string)
+	exemptedTagSHA512Map := make(map[string]string)
 	for _, exemptTag := range repo.ExemptedTags {
 		_, found := exemptedTagMap[exemptTag.Ref]
 		if found {
 			return nil, fmt.Errorf("duplicate extempted tag %s found in repository %s", exemptTag.Ref, repoUri)
 		}
 
-		_, found = exemptedTagSHA256Map[exemptTag.Ref]
+		_, found = exemptedTagSHA512Map[exemptTag.Ref]
 		if found {
-			return nil, fmt.Errorf("duplicate extempted SHA256 tag %s found in repository %s", exemptTag.Ref, repoUri)
+			return nil, fmt.Errorf("duplicate extempted SHA-512 tag %s found in repository %s", exemptTag.Ref, repoUri)
 		}
 
-		if exemptTag.Hash.SHA1 == nil && exemptTag.Hash.SHA256 == nil {
-			return nil, fmt.Errorf("at least one of hash.sha1 and hash.sha256 must be set for exempted tag %s", exemptTag.Ref)
+		if exemptTag.Hash.SHA1 == nil && exemptTag.Hash.SHA512 == nil {
+			return nil, fmt.Errorf("at least one of hash.sha1 and hash.sha512 must be set for exempted tag %s", exemptTag.Ref)
 		}
 
 		if exemptTag.Hash.SHA1 != nil {
@@ -212,30 +213,30 @@ func LoadRepoConfig(config *ParsedConfig, repoUri string) (*RepoConfig, error) {
 			exemptedTagMap[exemptTag.Ref] = *exemptTag.Hash.SHA1
 		}
 
-		if exemptTag.Hash.SHA256 != nil {
-			match, err := regexp.MatchString(hexSHA256Regex, *exemptTag.Hash.SHA256)
+		if exemptTag.Hash.SHA512 != nil {
+			match, err := regexp.MatchString(hexSHA512Regex, *exemptTag.Hash.SHA512)
 			if err != nil {
 				return nil, err
 			}
 
 			if !match {
-				return nil, fmt.Errorf("hash.sha256 for exempted tag must be 64 character hex, got %s", *exemptTag.Hash.SHA256)
+				return nil, fmt.Errorf("hash.sha512 for exempted tag must be 64 character hex, got %s", *exemptTag.Hash.SHA512)
 			}
 
-			exemptedTagSHA256Map[exemptTag.Ref] = *exemptTag.Hash.SHA256
+			exemptedTagSHA512Map[exemptTag.Ref] = *exemptTag.Hash.SHA512
 		}
 	}
 
 	protectedBranches := hashset.New[string](repo.ProtectedBranches...)
 
 	var afterSHA1 = hashset.New[plumbing.Hash]()
-	var afterSHA256 = hashset.New[[32]byte]()
-	afterSHA1ToSHA256 := make(map[plumbing.Hash][32]byte)
+	var afterSHA512 = hashset.New[[64]byte]()
+	afterSHA1ToSHA512 := make(map[plumbing.Hash][64]byte)
 
 	sha1ToBranch := make(map[plumbing.Hash]string)
 	branchToSHA1 := make(map[string]plumbing.Hash)
 
-	sha256ToBranch := make(map[[32]byte]string)
+	sha512ToBranch := make(map[[64]byte]string)
 
 	for _, after := range repo.After {
 		var sha1 plumbing.Hash
@@ -249,38 +250,38 @@ func LoadRepoConfig(config *ParsedConfig, repoUri string) (*RepoConfig, error) {
 			}
 		}
 
-		var sha256 [32]byte
-		if after.SHA256 != nil {
-			h, err := hex.DecodeString(*after.SHA256)
+		var sha512 [64]byte
+		if after.SHA512 != nil {
+			h, err := hex.DecodeString(*after.SHA512)
 			if err != nil {
 				return nil, err
 			}
 
-			if len(h) != 32 {
-				return nil, fmt.Errorf("SHA256 hash should be 32 bytes, got %d", len(h))
+			if len(h) != 64 {
+				return nil, fmt.Errorf("SHA-512 hash should be 64 bytes, got %d", len(h))
 			}
 
-			copy(sha256[:], h[:32])
+			copy(sha512[:], h[:])
 
-			afterSHA256.Add(sha256)
+			afterSHA512.Add(sha512)
 
 			if after.Branch != nil {
-				sha256ToBranch[sha256] = *after.Branch
+				sha512ToBranch[sha512] = *after.Branch
 			}
 		}
 
-		if after.SHA1 != nil && after.SHA256 != nil {
-			afterSHA1ToSHA256[sha1] = sha256
+		if after.SHA1 != nil && after.SHA512 != nil {
+			afterSHA1ToSHA512[sha1] = sha512
 		}
 	}
 
 	return &RepoConfig{
 		afterSHA1:                          afterSHA1,
-		afterSHA256:                        afterSHA256,
+		afterSHA512:                        afterSHA512,
 		sha1ToBranch:                       sha1ToBranch,
 		branchToSHA1:                       branchToSHA1,
-		sha256ToBranch:                     sha256ToBranch,
-		afterSHA1ToSHA256:                  afterSHA1ToSHA256,
+		sha512ToBranch:                     sha512ToBranch,
+		afterSHA1ToSHA512:                  afterSHA1ToSHA512,
 		maintainerEmails:                   maintainerEmails,
 		contributorEmails:                  contributorEmails,
 		maintainerOrContributorEmails:      maintainerOrContributor,
@@ -291,12 +292,13 @@ func LoadRepoConfig(config *ParsedConfig, repoUri string) (*RepoConfig, error) {
 		allowSSHSignatures:                 repo.Rules.AllowSSHSignatures,
 		requireSSHUserPresent:              repo.Rules.RequireSSHUserPresent,
 		requireSSHUserVerified:             repo.Rules.RequireSSHUserVerified,
+		allowSSHSHA256:                     repo.Rules.AllowSSHSHA256,
 		allowGPGSignatures:                 repo.Rules.AllowGPGSignatures,
 		requireSignedTags:                  repo.Rules.RequireSignedTags,
 		requireMergeCommits:                repo.Rules.RequireMergeCommits,
 		requireUpToDate:                    repo.Rules.RequireUpToDate,
 		exemptedTags:                       exemptedTagMap,
-		exemptedTagsSHA256:                 exemptedTagSHA256Map,
+		exemptedTagsSHA512:                 exemptedTagSHA512Map,
 		protectedBranches:                  protectedBranches,
 	}, nil
 }

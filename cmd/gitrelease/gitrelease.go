@@ -31,10 +31,11 @@ Options:
     -h, --help     Show help message`
 
 const (
-	tagRegex     = "v[0-9]+\\.[0-9]+\\.[0-9]+"
-	hashRegex    = "[0-9a-f]{40}"
-	keyfileRegex = "(~/|../)?[a-zA-Z0-9-_/.]+"
-	sshNamespace = "gitrelease"
+	tagRegex              = "v[0-9]+\\.[0-9]+\\.[0-9]+"
+	hashRegex             = "[0-9a-f]{40}"
+	keyfileRegex          = "(~/|../)?[a-zA-Z0-9-_/.]+"
+	sshNamespace          = "gitrelease"
+	defaultFilePermission = 0644
 )
 
 func main() {
@@ -454,7 +455,7 @@ func writeFile(envelope *gitrelease.Envelope, path string) error {
 	}
 
 	location := filepath.Join(path, "tag.link.intoto.jsonl")
-	err = os.WriteFile(location, data, os.ModePerm)
+	err = os.WriteFile(location, data, defaultFilePermission)
 	if err != nil {
 		return err
 	}

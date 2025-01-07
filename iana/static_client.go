@@ -35,7 +35,7 @@ func generateStatic() error {
 
 	data := []byte(sb.String())
 
-	err = os.WriteFile("static.go", data, 0644)
+	err = os.WriteFile("static.go", data, defaultFilePermission)
 	if err != nil {
 		log.Fatal(err)
 	}

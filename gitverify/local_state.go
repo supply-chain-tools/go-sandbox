@@ -51,12 +51,12 @@ func SaveLocalState(repo *git.Repository, state *gitkit.RepoState, repoConfig *R
 		return err
 	}
 
-	err = os.MkdirAll(filepath.Dir(localPath), os.ModePerm)
+	err = os.MkdirAll(filepath.Dir(localPath), defaultDirectoryPermission)
 	if err != nil {
 		return err
 	}
 
-	err = os.WriteFile(localPath, data, os.ModePerm)
+	err = os.WriteFile(localPath, data, defaultFilePermission)
 	if err != nil {
 		return err
 	}

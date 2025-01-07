@@ -60,7 +60,7 @@ We aim to make this useful for large repositories like the Linux kernel, but for
 on smaller repos.
 
 ### Shallow repositories
-Shallow repositories are currently not supported. All the repository state is needed to verify `SHA-1` and `SHA-256` hashes recursively.
+Shallow repositories are currently not supported. All the repository state is needed to verify `SHA-1` and `SHA-512` hashes recursively.
 
 ### At most two parent commits
 More than two parent commits is not supported.

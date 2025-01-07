@@ -1,7 +1,7 @@
 package gitverify
 
 import (
-	"crypto/sha256"
+	"crypto/sha512"
 	"encoding/hex"
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
@@ -11,9 +11,9 @@ import (
 	"strings"
 )
 
-func AfterCandidates(repo *git.Repository, repoConfig *RepoConfig, useSHA256 bool) ([]After, error) {
+func AfterCandidates(repo *git.Repository, repoConfig *RepoConfig, useSHA512 bool) ([]After, error) {
 	state := gitkit.LoadRepoState(repo)
-	sha256Hash := githash.NewGitHashFromRepoState(state, sha256.New())
+	sha512Hash := githash.NewGitHashFromRepoState(state, sha512.New())
 
 	pointedTo := hashset.New[plumbing.Hash]()
 
@@ -41,21 +41,21 @@ func AfterCandidates(repo *git.Repository, repoConfig *RepoConfig, useSHA256 boo
 
 		if isProtected {
 			sha1 := reference.Hash().String()
-			var hexSHA256 *string = nil
+			var hexSHA512 *string = nil
 
-			if useSHA256 {
-				sha2, err := sha256Hash.CommitSum(reference.Hash())
+			if useSHA512 {
+				sha2, err := sha512Hash.CommitSum(reference.Hash())
 				if err != nil {
 					return err
 				}
 
 				h := hex.EncodeToString(sha2)
-				hexSHA256 = &h
+				hexSHA512 = &h
 			}
 
 			candidates = append(candidates, After{
 				SHA1:   &sha1,
-				SHA256: hexSHA256,
+				SHA512: hexSHA512,
 				Branch: &branchName,
 			})
 
@@ -77,20 +77,20 @@ func AfterCandidates(repo *git.Repository, repoConfig *RepoConfig, useSHA256 boo
 				continue
 			}
 
-			var hexSHA256 *string = nil
-			if useSHA256 {
-				sha2, err := sha256Hash.CommitSum(commit.Hash)
+			var hexSHA512 *string = nil
+			if useSHA512 {
+				sha2, err := sha512Hash.CommitSum(commit.Hash)
 				if err != nil {
 					return nil, err
 				}
 
 				h := hex.EncodeToString(sha2)
-				hexSHA256 = &h
+				hexSHA512 = &h
 			}
 
 			candidates = append(candidates, After{
 				SHA1:   &sha1,
-				SHA256: hexSHA256,
+				SHA512: hexSHA512,
 			})
 		}
 	}

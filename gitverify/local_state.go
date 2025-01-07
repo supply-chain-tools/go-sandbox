@@ -29,14 +29,14 @@ func GetLocalStatePath(forge string, org string, repoName string) (string, error
 	return filepath.Join(homeDirectory, ".config", "gitverify", forge, org, repoName, "local.json"), nil
 }
 
-func SaveLocalState(repo *git.Repository, state *gitkit.RepoState, repoConfig *RepoConfig, repoUri string, localPath string, gitHashSHA1 githash.GitHash, gitHashSHA256 githash.GitHash) error {
+func SaveLocalState(repo *git.Repository, state *gitkit.RepoState, repoConfig *RepoConfig, repoUri string, localPath string, gitHashSHA1 githash.GitHash, gitHashSHA512 githash.GitHash) error {
 	// TODO time of check, time of save issues
-	tags, err := ComputeExemptTags(repo, state, gitHashSHA1, gitHashSHA256, true)
+	tags, err := ComputeExemptTags(repo, state, gitHashSHA1, gitHashSHA512, true)
 	if err != nil {
 		return err
 	}
 
-	protectedBranches, err := computeProtectedBranches(repo, repoConfig, gitHashSHA1, gitHashSHA256)
+	protectedBranches, err := computeProtectedBranches(repo, repoConfig, gitHashSHA1, gitHashSHA512)
 	if err != nil {
 		return err
 	}
@@ -64,7 +64,7 @@ func SaveLocalState(repo *git.Repository, state *gitkit.RepoState, repoConfig *R
 	return nil
 }
 
-func VerifyLocalState(repo *git.Repository, state *gitkit.RepoState, repoConfig *RepoConfig, repoUri string, localPath string, gitHashSHA1 githash.GitHash, gitHashSHA256 githash.GitHash) error {
+func VerifyLocalState(repo *git.Repository, state *gitkit.RepoState, repoConfig *RepoConfig, repoUri string, localPath string, gitHashSHA1 githash.GitHash, gitHashSHA512 githash.GitHash) error {
 	data, err := os.ReadFile(localPath)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -80,7 +80,7 @@ func VerifyLocalState(repo *git.Repository, state *gitkit.RepoState, repoConfig 
 		return err
 	}
 
-	newTags, err := ComputeExemptTags(repo, state, gitHashSHA1, gitHashSHA256, true)
+	newTags, err := ComputeExemptTags(repo, state, gitHashSHA1, gitHashSHA512, true)
 	if err != nil {
 		return err
 	}
@@ -102,23 +102,23 @@ func VerifyLocalState(repo *git.Repository, state *gitkit.RepoState, repoConfig 
 				return fmt.Errorf("tag SHA-1 hashes must be set")
 			}
 
-			if newTag.Hash.SHA256 == nil || tag.Hash.SHA256 == nil {
-				return fmt.Errorf("tag SHA-256 hashes must be set")
+			if newTag.Hash.SHA512 == nil || tag.Hash.SHA512 == nil {
+				return fmt.Errorf("tag SHA-512 hashes must be set")
 			}
 
 			if *newTag.Hash.SHA1 != *tag.Hash.SHA1 {
 				return fmt.Errorf("tag '%s' hash has changed from %s to %s", tag.Ref, *tag.Hash.SHA1, *newTag.Hash.SHA1)
 			}
 
-			if *newTag.Hash.SHA256 != *tag.Hash.SHA256 {
-				return fmt.Errorf("tag '%s' SHA-256 hash has changed from %s to %s", tag.Ref, *tag.Hash.SHA256, *newTag.Hash.SHA256)
+			if *newTag.Hash.SHA512 != *tag.Hash.SHA512 {
+				return fmt.Errorf("tag '%s' SHA-512 hash has changed from %s to %s", tag.Ref, *tag.Hash.SHA512, *newTag.Hash.SHA512)
 			}
 		} else {
 			return fmt.Errorf("tag '%s' has been deleted, was %s", tag.Ref, *tag.Hash.SHA1)
 		}
 	}
 
-	newProtectedBranches, err := computeProtectedBranches(repo, repoConfig, gitHashSHA1, gitHashSHA256)
+	newProtectedBranches, err := computeProtectedBranches(repo, repoConfig, gitHashSHA1, gitHashSHA512)
 	if err != nil {
 		return err
 	}
@@ -140,8 +140,8 @@ func VerifyLocalState(repo *git.Repository, state *gitkit.RepoState, repoConfig 
 				return fmt.Errorf("branch hashes must be set")
 			}
 
-			if newBranch.Hash.SHA256 == nil || branch.Hash.SHA256 == nil {
-				return fmt.Errorf("branch SHA-256 hashes must be set")
+			if newBranch.Hash.SHA512 == nil || branch.Hash.SHA512 == nil {
+				return fmt.Errorf("branch SHA-512 hashes must be set")
 			}
 
 			c, found := state.CommitMap[plumbing.NewHash(*newBranch.Hash.SHA1)]
@@ -162,13 +162,13 @@ func VerifyLocalState(repo *git.Repository, state *gitkit.RepoState, repoConfig 
 				queue = queue[1:]
 
 				if current.Hash.String() == *branch.Hash.SHA1 {
-					hashSHA256, err := gitHashSHA256.CommitSum(current.Hash)
+					hashSHA512, err := gitHashSHA512.CommitSum(current.Hash)
 					if err != nil {
 						return err
 					}
 
-					if hex.EncodeToString(hashSHA256) != *branch.Hash.SHA256 {
-						return fmt.Errorf("SHA-256 does not match SHA-1 for %s", branch.Ref)
+					if hex.EncodeToString(hashSHA512) != *branch.Hash.SHA512 {
+						return fmt.Errorf("SHA-512 does not match SHA-1 for %s", branch.Ref)
 					}
 
 					break
@@ -203,7 +203,7 @@ func VerifyLocalState(repo *git.Repository, state *gitkit.RepoState, repoConfig 
 	return nil
 }
 
-func computeProtectedBranches(repo *git.Repository, config *RepoConfig, gitHashSHA1 githash.GitHash, gitHashSHA256 githash.GitHash) ([]ExemptTag, error) {
+func computeProtectedBranches(repo *git.Repository, config *RepoConfig, gitHashSHA1 githash.GitHash, gitHashSHA512 githash.GitHash) ([]ExemptTag, error) {
 	remotes, err := repo.References()
 	if err != nil {
 		return nil, err
@@ -216,17 +216,17 @@ func computeProtectedBranches(repo *git.Repository, config *RepoConfig, gitHashS
 		if isProtected {
 
 			hashSHA1 := reference.Hash().String()
-			h, err := gitHashSHA256.CommitSum(reference.Hash())
+			h, err := gitHashSHA512.CommitSum(reference.Hash())
 			if err != nil {
 				return err
 			}
-			hashSHA256 := hex.EncodeToString(h)
+			hashSHA512 := hex.EncodeToString(h)
 
 			result = append(result, ExemptTag{
 				Ref: reference.Name().String(),
 				Hash: Digests{
 					SHA1:   &hashSHA1,
-					SHA256: &hashSHA256,
+					SHA512: &hashSHA512,
 				},
 			})
 		}

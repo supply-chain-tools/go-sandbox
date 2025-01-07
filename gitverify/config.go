@@ -70,12 +70,12 @@ type Repository struct {
 
 type Digests struct {
 	SHA1   *string `json:"sha1,omitempty"`
-	SHA256 *string `json:"sha256,omitempty"`
+	SHA512 *string `json:"sha512,omitempty"`
 }
 
 type After struct {
 	SHA1   *string `json:"sha1,omitempty"`
-	SHA256 *string `json:"sha256,omitempty"`
+	SHA512 *string `json:"sha512,omitempty"`
 	Branch *string `json:"branch,omitempty"`
 }
 
@@ -330,11 +330,11 @@ func validateUri(uri string) (string, error) {
 func validateAfter(after []After) ([]After, error) {
 	allBranches := hashset.New[string]()
 	allSHA1 := hashset.New[string]()
-	allSHA256 := hashset.New[string]()
+	allSHA512 := hashset.New[string]()
 
 	for _, a := range after {
-		if a.SHA1 == nil && a.SHA256 == nil {
-			return nil, fmt.Errorf("either after SHA1 or after SHA256 must be set, or both")
+		if a.SHA1 == nil && a.SHA512 == nil {
+			return nil, fmt.Errorf("either after.sha1 or after.sha512 must be set, or both")
 		}
 
 		if a.SHA1 != nil {
@@ -344,7 +344,7 @@ func validateAfter(after []After) ([]After, error) {
 			}
 
 			if !match {
-				return nil, fmt.Errorf("after SHA1 '%s' must be a 40 character hex", *a.SHA1)
+				return nil, fmt.Errorf("after.sha1 '%s' must be a 40 character hex", *a.SHA1)
 			}
 
 			if allSHA1.Contains(*a.SHA1) {
@@ -352,18 +352,18 @@ func validateAfter(after []After) ([]After, error) {
 			}
 		}
 
-		if a.SHA256 != nil {
-			match, err := regexp.MatchString(hexSHA256Regex, *a.SHA256)
+		if a.SHA512 != nil {
+			match, err := regexp.MatchString(hexSHA512Regex, *a.SHA512)
 			if err != nil {
 				return nil, err
 			}
 
 			if !match {
-				return nil, fmt.Errorf("after SHA256 '%s' must be a 64 character hex", *a.SHA256)
+				return nil, fmt.Errorf("after.sha512 '%s' must be a 128 character hex", *a.SHA512)
 			}
 
-			if allSHA256.Contains(*a.SHA256) {
-				return nil, fmt.Errorf("after SHA256 '%s' must be unique", *a.SHA256)
+			if allSHA512.Contains(*a.SHA512) {
+				return nil, fmt.Errorf("after.sha512 '%s' must be unique", *a.SHA512)
 			}
 		}
 

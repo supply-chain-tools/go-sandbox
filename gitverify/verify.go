@@ -23,10 +23,10 @@ type ValidateOptions struct {
 }
 
 const hexSHA1Regex = "^[a-f0-9]{40}$"
-const hexSHA256Regex = "^[a-f0-9]{64}$"
+const hexSHA512Regex = "^[a-f0-9]{128}$"
 
-func Verify(repo *git.Repository, state *gitkit.RepoState, repoConfig *RepoConfig, gitHashSHA1 githash.GitHash, gitHashSHA256 githash.GitHash, opts *ValidateOptions) error {
-	commitMetadata, err := computeCommitMetadata(state, repoConfig, gitHashSHA1, gitHashSHA256)
+func Verify(repo *git.Repository, state *gitkit.RepoState, repoConfig *RepoConfig, gitHashSHA1 githash.GitHash, gitHashSHA512 githash.GitHash, opts *ValidateOptions) error {
+	commitMetadata, err := computeCommitMetadata(state, repoConfig, gitHashSHA1, gitHashSHA512)
 	if err != nil {
 		return err
 	}
@@ -41,7 +41,7 @@ func Verify(repo *git.Repository, state *gitkit.RepoState, repoConfig *RepoConfi
 			return fmt.Errorf("target commit must be a 40 character hex, not '%s'", opts.Commit)
 		}
 
-		err = validateOpts(opts, repo, state, commitMetadata, repoConfig, gitHashSHA1, gitHashSHA256)
+		err = validateOpts(opts, repo, state, commitMetadata, repoConfig, gitHashSHA1, gitHashSHA512)
 		if err != nil {
 			return err
 		}
@@ -53,7 +53,7 @@ func Verify(repo *git.Repository, state *gitkit.RepoState, repoConfig *RepoConfi
 			}
 		}
 
-		err = validateTags(repo, state, repoConfig, gitHashSHA1, gitHashSHA256)
+		err = validateTags(repo, state, repoConfig, gitHashSHA1, gitHashSHA512)
 		if err != nil {
 			return err
 		}
@@ -143,7 +143,7 @@ func validateCommit(commit *object.Commit, commitMetadata map[plumbing.Hash]*Com
 	return nil
 }
 
-func validateOpts(opts *ValidateOptions, repo *git.Repository, state *gitkit.RepoState, commitMetadata map[plumbing.Hash]*CommitData, config *RepoConfig, gitHashSHA1 githash.GitHash, gitHashSHA256 githash.GitHash) error {
+func validateOpts(opts *ValidateOptions, repo *git.Repository, state *gitkit.RepoState, commitMetadata map[plumbing.Hash]*CommitData, config *RepoConfig, gitHashSHA1 githash.GitHash, gitHashSHA512 githash.GitHash) error {
 	head, err := repo.Head()
 	if err != nil {
 		return err
@@ -181,7 +181,7 @@ func validateOpts(opts *ValidateOptions, repo *git.Repository, state *gitkit.Rep
 			tagName := strings.TrimPrefix(tag.Name().String(), "refs/tags/")
 
 			if tagName == opts.Tag {
-				err := validateTag(tag, state, config, gitHashSHA1, gitHashSHA256)
+				err := validateTag(tag, state, config, gitHashSHA1, gitHashSHA512)
 				if err != nil {
 					return err
 				}
@@ -502,14 +502,14 @@ func validateProtectedBranch(reference *plumbing.Reference, branchName string, s
 	return nil
 }
 
-func validateTags(repo *git.Repository, state *gitkit.RepoState, repoConfig *RepoConfig, gitHashSHA1 githash.GitHash, gitHashSHA256 githash.GitHash) error {
+func validateTags(repo *git.Repository, state *gitkit.RepoState, repoConfig *RepoConfig, gitHashSHA1 githash.GitHash, gitHashSHA512 githash.GitHash) error {
 	tags, err := repo.Tags()
 	if err != nil {
 		return err
 	}
 
 	err = tags.ForEach(func(tag *plumbing.Reference) error {
-		return validateTag(tag, state, repoConfig, gitHashSHA1, gitHashSHA256)
+		return validateTag(tag, state, repoConfig, gitHashSHA1, gitHashSHA512)
 	})
 	if err != nil {
 		return err
@@ -518,7 +518,7 @@ func validateTags(repo *git.Repository, state *gitkit.RepoState, repoConfig *Rep
 	return nil
 }
 
-func validateTag(tag *plumbing.Reference, state *gitkit.RepoState, repoConfig *RepoConfig, gitHashSHA1 githash.GitHash, gitHashSHA256 githash.GitHash) error {
+func validateTag(tag *plumbing.Reference, state *gitkit.RepoState, repoConfig *RepoConfig, gitHashSHA1 githash.GitHash, gitHashSHA512 githash.GitHash) error {
 	isExempted := false
 
 	tagHash, found := repoConfig.exemptedTags[tag.Name().String()]
@@ -531,25 +531,25 @@ func validateTag(tag *plumbing.Reference, state *gitkit.RepoState, repoConfig *R
 
 	t, isAnnotatedTag := state.TagMap[tag.Hash()]
 
-	tagHashSHA256, found := repoConfig.exemptedTagsSHA256[tag.Name().String()]
+	tagHashSHA512, found := repoConfig.exemptedTagsSHA512[tag.Name().String()]
 	if found {
-		var sha256Hash []byte
+		var sha512Hash []byte
 		var err error
 		if isAnnotatedTag {
-			sha256Hash, err = gitHashSHA256.TagSum(t.Hash)
+			sha512Hash, err = gitHashSHA512.TagSum(t.Hash)
 			if err != nil {
 				return err
 			}
 		} else {
-			sha256Hash, err = gitHashSHA256.CommitSum(tag.Hash())
+			sha512Hash, err = gitHashSHA512.CommitSum(tag.Hash())
 			if err != nil {
 				return err
 			}
 		}
 
-		h := hex.EncodeToString(sha256Hash)
-		if tagHashSHA256 != h {
-			return fmt.Errorf("wrong hash.sha256 for exempted tag '%s', got %s, expected %s", tag.Name().String(), h, tagHashSHA256)
+		h := hex.EncodeToString(sha512Hash)
+		if tagHashSHA512 != h {
+			return fmt.Errorf("wrong SHA-512 for exempted tag '%s', got %s, expected %s", tag.Name().String(), h, tagHashSHA512)
 		}
 		isExempted = true
 	}
@@ -619,11 +619,11 @@ func tagContent(tag *object.Tag) (string, error) {
 	return sb.String(), nil
 }
 
-func computeCommitMetadata(state *gitkit.RepoState, repoConfig *RepoConfig, gitHashSHA1 githash.GitHash, gitHashSHA256 githash.GitHash) (map[plumbing.Hash]*CommitData, error) {
+func computeCommitMetadata(state *gitkit.RepoState, repoConfig *RepoConfig, gitHashSHA1 githash.GitHash, gitHashSHA512 githash.GitHash) (map[plumbing.Hash]*CommitData, error) {
 	commitMap := make(map[plumbing.Hash]*CommitData)
 
 	foundAfterSHA1 := hashset.New[plumbing.Hash]()
-	foundAfterSHA256 := hashset.New[[32]byte]()
+	foundAfterSHA512 := hashset.New[[64]byte]()
 
 	for hash, commit := range state.CommitMap {
 		if len(commit.ParentHashes) > 2 {
@@ -639,27 +639,27 @@ func computeCommitMetadata(state *gitkit.RepoState, repoConfig *RepoConfig, gitH
 			return nil, fmt.Errorf("failed to verify hash %s", hash)
 		}
 
-		var verifiedSHA256 [32]byte
-		var sha256WasVerified = false
-		if repoConfig.afterSHA256.Size() > 0 {
-			v, err := gitHashSHA256.CommitSum(hash)
+		var verifiedSHA512 [64]byte
+		var sha512WasVerified = false
+		if repoConfig.afterSHA512.Size() > 0 {
+			v, err := gitHashSHA512.CommitSum(hash)
 			if err != nil {
 				return nil, err
 			}
 
-			if len(v) != 32 {
-				return nil, fmt.Errorf("expected hash to be 32, got %d", len(verifiedSHA256))
+			if len(v) != 64 {
+				return nil, fmt.Errorf("expected hash to be 64, got %d", len(v))
 			}
 
-			copy(verifiedSHA256[:], v[:32])
-			sha256WasVerified = true
+			copy(verifiedSHA512[:], v[:])
+			sha512WasVerified = true
 		}
 
-		matchedAfterSHA256 := false
-		if sha256WasVerified {
-			if repoConfig.afterSHA256.Contains(verifiedSHA256) {
-				matchedAfterSHA256 = true
-				foundAfterSHA256.Add(verifiedSHA256)
+		matchedAfterSHA512 := false
+		if sha512WasVerified {
+			if repoConfig.afterSHA512.Contains(verifiedSHA512) {
+				matchedAfterSHA512 = true
+				foundAfterSHA512.Add(verifiedSHA512)
 			}
 		}
 
@@ -673,26 +673,26 @@ func computeCommitMetadata(state *gitkit.RepoState, repoConfig *RepoConfig, gitH
 
 		matchedAfter := false
 
-		_, found := repoConfig.afterSHA1ToSHA256[hash]
+		_, found := repoConfig.afterSHA1ToSHA512[hash]
 		if found {
-			// Both SHA-1 and SHA-256 specified, check that they are the same
-			if matchedAfterSHA1 != matchedAfterSHA256 {
-				return nil, fmt.Errorf("matched after SHA-1 or SHA-256 but not both")
+			// Both SHA-1 and SHA-512 specified, check that they are the same
+			if matchedAfterSHA1 != matchedAfterSHA512 {
+				return nil, fmt.Errorf("matched after SHA-1 or SHA-512 but not both")
 			}
 
 			matchedAfter = matchedAfterSHA1
 		} else {
 			// Otherwise it's enough that one matched
-			matchedAfter = matchedAfterSHA1 || matchedAfterSHA256
+			matchedAfter = matchedAfterSHA1 || matchedAfterSHA512
 		}
 
 		if matchedAfter {
 			if !repoConfig.afterSHA1.Contains(hash) {
-				// This was matched using SHA-256, add it to SHA-1 as well
+				// This was matched using SHA-512, add it to SHA-1 as well
 				repoConfig.afterSHA1.Add(hash)
 
-				// Use branches from SHA-256
-				branch := repoConfig.sha256ToBranch[verifiedSHA256]
+				// Use branches from SHA-512
+				branch := repoConfig.sha512ToBranch[verifiedSHA512]
 				repoConfig.sha1ToBranch[hash] = branch
 				repoConfig.branchToSHA1[branch] = hash
 			}
@@ -729,13 +729,13 @@ func computeCommitMetadata(state *gitkit.RepoState, repoConfig *RepoConfig, gitH
 		return nil, fmt.Errorf("after SHA-1 commit(s) not found in repo: %s", strings.Join(missingHashes, ","))
 	}
 
-	afterSHA256Diff := repoConfig.afterSHA256.Difference(foundAfterSHA256)
-	if afterSHA256Diff.Size() > 0 {
+	afterSHA512Diff := repoConfig.afterSHA512.Difference(foundAfterSHA512)
+	if afterSHA512Diff.Size() > 0 {
 		missingHashes := make([]string, 0)
-		for _, k := range afterSHA256Diff.Values() {
+		for _, k := range afterSHA512Diff.Values() {
 			missingHashes = append(missingHashes, hex.EncodeToString(k[:]))
 		}
-		return nil, fmt.Errorf("after SHA-256 commit(s) not found in repo: %s", strings.Join(missingHashes, ","))
+		return nil, fmt.Errorf("after SHA-512 commit(s) not found in repo: %s", strings.Join(missingHashes, ","))
 	}
 
 	return commitMap, nil

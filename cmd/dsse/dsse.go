@@ -45,8 +45,9 @@ Show PAE
     $ dsse pae dsse.json`
 
 const (
-	keyfilePathRegex = "(~/|(../)+)?[a-zA-Z0-9-_/.]+"
-	sshNamespace     = "dsse"
+	keyfilePathRegex      = "(~/|(../)+)?[a-zA-Z0-9-_/.]+"
+	sshNamespace          = "dsse"
+	defaultFilePermission = 0644
 )
 
 func main() {
@@ -242,7 +243,7 @@ func signAndWrite(DSSEPath string, envelope *gitrelease.Envelope, keyfilePath st
 		return err
 	}
 
-	err = os.WriteFile(DSSEPath, output, os.ModePerm)
+	err = os.WriteFile(DSSEPath, output, defaultFilePermission)
 	if err != nil {
 		return err
 	}

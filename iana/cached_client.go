@@ -7,6 +7,11 @@ import (
 	"time"
 )
 
+const (
+	defaultFilePermission      = 0644
+	defaultDirectoryPermission = 0755
+)
+
 type cachedClient struct {
 	cacheDirectory string
 	remoteClient   Client
@@ -55,7 +60,7 @@ func (cc *cachedClient) getAndCacheAllTlds(path string) ([]string, error) {
 		return nil, err
 	}
 
-	err = os.MkdirAll(filepath.Dir(path), os.ModePerm)
+	err = os.MkdirAll(filepath.Dir(path), defaultDirectoryPermission)
 	if err != nil {
 		return nil, err
 	}
@@ -65,7 +70,7 @@ func (cc *cachedClient) getAndCacheAllTlds(path string) ([]string, error) {
 		return nil, err
 	}
 
-	err = os.WriteFile(path, data, os.ModePerm)
+	err = os.WriteFile(path, data, defaultFilePermission)
 	if err != nil {
 		return nil, err
 	}

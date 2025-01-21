@@ -2,6 +2,7 @@ package gitkit
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -49,22 +50,22 @@ type GitHubOptions struct {
 	Bare  bool
 }
 
-func (gc *GitHubClient) CloneOrFetchRepo(url string, progressWriter *io.Writer, opts *GitHubOptions) (*GitHubResult, error) {
+func (gc *GitHubClient) CloneOrFetchRepo(url string, localBasePath string, progressWriter *io.Writer, opts *GitHubOptions) (*GitHubResult, error) {
 
 	if err := isGitHubURL(url); err != nil {
 		return nil, err
 	}
 
-	result, err := gc.FetchRepo(url, progressWriter, opts)
+	result, err := gc.FetchRepo(url, localBasePath, progressWriter, opts)
 	if err != nil {
 		if strings.Contains(err.Error(), git.ErrRepositoryNotExists.Error()) {
-			return gc.CloneRepo(url, progressWriter, opts)
+			return gc.CloneRepo(url, localBasePath, progressWriter, opts)
 		}
 	}
 	return result, err
 }
 
-func (gc *GitHubClient) CloneRepo(url string, progressWriter *io.Writer, opts *GitHubOptions) (*GitHubResult, error) {
+func (gc *GitHubClient) CloneRepo(url string, localBasePath string, progressWriter *io.Writer, opts *GitHubOptions) (*GitHubResult, error) {
 	var result GitHubResult
 
 	if err := isGitHubURL(url); err != nil {
@@ -76,7 +77,7 @@ func (gc *GitHubClient) CloneRepo(url string, progressWriter *io.Writer, opts *G
 		return nil, err
 	}
 
-	localRepoPath, err := getLocalRepoPath(owner, *repoName)
+	localRepoPath, err := getLocalRepoPath(localBasePath, owner, *repoName)
 	if err != nil {
 		return nil, err
 	}
@@ -105,7 +106,11 @@ func (gc *GitHubClient) CloneRepo(url string, progressWriter *io.Writer, opts *G
 		cloneOptions.Progress = *progressWriter
 	}
 
-	fmt.Fprintf(cloneOptions.Progress, "Cloning '%s/%s' into '%s'\n", owner, *repoName, localRepoPath)
+	_, err = fmt.Fprintf(cloneOptions.Progress, "Cloning '%s/%s' into '%s'\n", owner, *repoName, localRepoPath)
+	if err != nil {
+		result.Error = fmt.Errorf("failed to write progress: %w", err)
+		return &result, err
+	}
 	slog.Debug("Cloning", "repo", url, "to", localRepoPath)
 
 	_, err = git.PlainClone(localRepoPath, opts.Bare, cloneOptions)
@@ -116,7 +121,7 @@ func (gc *GitHubClient) CloneRepo(url string, progressWriter *io.Writer, opts *G
 	return &result, result.Error
 }
 
-func (gc *GitHubClient) FetchRepo(url string, progressWriter *io.Writer, opts *GitHubOptions) (*GitHubResult, error) {
+func (gc *GitHubClient) FetchRepo(url string, localBasePath string, progressWriter *io.Writer, opts *GitHubOptions) (*GitHubResult, error) {
 	var result GitHubResult
 
 	if err := isGitHubURL(url); err != nil {
@@ -128,7 +133,7 @@ func (gc *GitHubClient) FetchRepo(url string, progressWriter *io.Writer, opts *G
 		return &result, err
 	}
 
-	localRepoPath, err := getLocalRepoPath(owner, *repoName)
+	localRepoPath, err := getLocalRepoPath(localBasePath, owner, *repoName)
 	if err != nil {
 		return &result, err
 	}
@@ -161,10 +166,15 @@ func (gc *GitHubClient) FetchRepo(url string, progressWriter *io.Writer, opts *G
 
 	repo, err := git.PlainOpen(localRepoPath)
 	if err != nil {
-		return &result, fmt.Errorf("unable to fetch '%s/%s': %v", owner, *repoName, err)
+		result.Error = fmt.Errorf("unable to fetch '%s/%s': %v", owner, *repoName, err)
+		return &result, result.Error
 	}
 
-	fmt.Fprintf(fetchOptions.Progress, "Repository '%s/%s' exists. Fetching updates...\n", owner, *repoName)
+	_, err = fmt.Fprintf(fetchOptions.Progress, "Repository '%s/%s' exists. Fetching updates...\n", owner, *repoName)
+	if err != nil {
+		result.Error = fmt.Errorf("failed to write proress: %w", err)
+		return &result, result.Error
+	}
 	slog.Debug("Fetching updates for", "repo", localRepoPath)
 
 	remote, err := repo.Remote("origin")
@@ -175,7 +185,7 @@ func (gc *GitHubClient) FetchRepo(url string, progressWriter *io.Writer, opts *G
 
 	err = remote.Fetch(fetchOptions)
 	if err != nil {
-		if err != git.NoErrAlreadyUpToDate && err.Error() != "remote repository is empty" {
+		if !errors.Is(err, git.NoErrAlreadyUpToDate) && err.Error() != "remote repository is empty" {
 			result.Error = fmt.Errorf("error fetching repo '%s:': %v", *repoName, err)
 			return &result, result.Error
 		}
@@ -217,7 +227,7 @@ func (gc *GitHubClient) GetRepositories(url string) ([]string, error) {
 		owner = *orgInfo.Login
 	} else {
 		if strings.ToLower(owner) != strings.ToLower(*userInfo.Login) {
-			return nil, fmt.Errorf("actual '%s' and requested '%s' user differ in more than casing", *orgInfo.Login, owner)
+			return nil, fmt.Errorf("actual '%s' and requested '%s' user differ in more than casing", *userInfo.Login, owner)
 		}
 		owner = *userInfo.Login
 	}
@@ -392,11 +402,7 @@ func isGitHubURL(url string) error {
 	return nil
 }
 
-func getLocalRepoPath(owner, repoName string) (string, error) {
-	localBasePath, err := os.Getwd()
-	if err != nil {
-		return "", err
-	}
+func getLocalRepoPath(localBasePath string, owner, repoName string) (string, error) {
 	return filepath.Join(localBasePath, owner, repoName), nil
 }
 

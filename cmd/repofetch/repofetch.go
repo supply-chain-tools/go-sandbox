@@ -174,6 +174,11 @@ func fetchRepositories(client *gitkit.GitHubClient, uris []string, opts options)
 	sem := make(chan struct{}, opts.concurrency)
 	var wg sync.WaitGroup
 
+	cwd, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("failed to get current directory: %w", err)
+	}
+
 	for _, repoURL := range reposToClone {
 		wg.Add(1)
 		sem <- struct{}{}
@@ -182,13 +187,12 @@ func fetchRepositories(client *gitkit.GitHubClient, uris []string, opts options)
 			defer wg.Done()
 			defer func() { <-sem }()
 
-			result, err := client.CloneOrFetchRepo(repoURL, &io.Discard, &cloneOpts)
+			result, err := client.CloneOrFetchRepo(repoURL, cwd, &io.Discard, &cloneOpts)
 			if err != nil {
-				slog.Debug("Failed to clone/fetch repository", "url", repoURL, "error", err)
-				return
+				fmt.Printf("[error]: %s %s: %s\n", result.GitCommand, result.RepoURL, result.Error)
+			} else {
+				fmt.Printf("[done]: %s %s\n", result.GitCommand, result.RepoURL)
 			}
-
-			fmt.Println("Result:", result)
 		}(repoURL)
 	}
 	wg.Wait()

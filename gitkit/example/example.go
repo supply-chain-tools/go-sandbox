@@ -2,6 +2,8 @@ package main
 
 import (
 	"fmt"
+	"log"
+	"os"
 
 	"github.com/supply-chain-tools/go-sandbox/gitkit"
 )
@@ -14,6 +16,10 @@ func main() {
 	}
 
 	client := gitkit.NewGitHubClient()
+	cwd, err := os.Getwd()
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	for _, path := range repoPaths {
 		repos, err := client.GetRepositories(path)
@@ -23,7 +29,7 @@ func main() {
 		}
 
 		for _, repoURL := range repos {
-			result, err := client.CloneOrFetchRepo(repoURL, nil, nil)
+			result, err := client.CloneOrFetchRepo(repoURL, cwd, nil, nil)
 			if err != nil {
 				fmt.Println("Error:", err)
 			} else {

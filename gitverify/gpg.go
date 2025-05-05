@@ -25,7 +25,7 @@ func validateIdentityGPGCommit(commit *object.Commit, id identity, config *RepoC
 func validateGPGCommit(commit *object.Commit, key string) error {
 	entity, err := commit.Verify(key)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to verify commit %s: %w", commit.Hash.String(), err)
 	}
 
 	entityEmails := hashset.New[string]()
@@ -59,7 +59,7 @@ func validateIdentityGPGTag(tag *object.Tag, id identity, config *RepoConfig) er
 func validateGPGTag(tag *object.Tag, key string) error {
 	entity, err := tag.Verify(key)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to verify tag %s: %w", tag.Hash.String(), err)
 	}
 
 	entityEmails := hashset.New[string]()

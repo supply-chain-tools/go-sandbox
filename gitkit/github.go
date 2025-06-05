@@ -13,7 +13,7 @@ import (
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing/transport"
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
-	"github.com/google/go-github/v61/github"
+	"github.com/google/go-github/v72/github"
 )
 
 type GitHubClient struct {

@@ -5,13 +5,14 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"github.com/supply-chain-tools/go-sandbox/gitrelease"
 	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/supply-chain-tools/go-sandbox/gitrelease"
 )
 
 const usage = `Usage:
@@ -96,7 +97,7 @@ func main() {
 			print("Failed to get PAE: ", err.Error(), "\n")
 		}
 
-		fmt.Printf(string(pae))
+		fmt.Print(string(pae))
 	default:
 		print("Unknown command: ", optionsAndArgs.command, "\n")
 		os.Exit(1)

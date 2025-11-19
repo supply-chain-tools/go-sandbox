@@ -5,8 +5,10 @@ stuff and breaking changes are to be expected.**
 
 ## Overview
 
+Graduated
+ - [gitverify](https://github.com/supply-chain-tools/gitverify) - verify signatures and integrity of Git repositories
+
 CLIs
- - [cmd/gitverify](cmd/gitverify) - verify signatures and integrity of Git repositories
  - [cmd/gitrelease](cmd/gitrelease) - create `tag` and `tag.link` for a release
  - [cmd/githash](cmd/githash) - compute Git hashes with alternative hash functions
  - [cmd/gohash](cmd/gohash) - compute the hashes of Go packages in Git repositories
@@ -26,7 +28,7 @@ Libraries
 
 The tools in `cmd/` can be installed with `go`
 ```sh
-go install github.com/supply-chain-tools/go-sandbox/cmd/gitverify@latest
+go install github.com/supply-chain-tools/go-sandbox/cmd/githash@latest
 ```
 
 Further information in the README for each tool.

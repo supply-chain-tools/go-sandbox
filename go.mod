@@ -2,14 +2,14 @@ module github.com/supply-chain-tools/go-sandbox
 
 go 1.24.0
 
-toolchain go1.25.4
+toolchain go1.25.9
 
 require (
 	github.com/bradleyfalzon/ghinstallation/v2 v2.17.0
-	github.com/go-git/go-git/v5 v5.16.3
+	github.com/go-git/go-git/v5 v5.18.0
 	github.com/google/go-github/v72 v72.0.0
 	go.uber.org/ratelimit v0.3.1
-	golang.org/x/crypto v0.44.0
+	golang.org/x/crypto v0.45.0
 	golang.org/x/mod v0.30.0
 )
 
@@ -18,11 +18,11 @@ require (
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/ProtonMail/go-crypto v1.3.0 // indirect
 	github.com/benbjohnson/clock v1.3.0 // indirect
-	github.com/cloudflare/circl v1.6.1 // indirect
+	github.com/cloudflare/circl v1.6.3 // indirect
 	github.com/cyphar/filepath-securejoin v0.6.0 // indirect
 	github.com/emirpasic/gods v1.18.1 // indirect
 	github.com/go-git/gcfg v1.5.1-0.20230307220236-3a3c6141e376 // indirect
-	github.com/go-git/go-billy/v5 v5.6.2 // indirect
+	github.com/go-git/go-billy/v5 v5.8.0 // indirect
 	github.com/golang-jwt/jwt/v4 v4.5.2 // indirect
 	github.com/golang/groupcache v0.0.0-20241129210726-2c02b8208cf8 // indirect
 	github.com/google/go-github/v75 v75.0.0 // indirect

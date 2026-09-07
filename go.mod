@@ -1,16 +1,16 @@
 module github.com/supply-chain-tools/go-sandbox
 
-go 1.25.0
+go 1.27.0
 
-toolchain go1.25.11
+toolchain go1.27.1
 
 require (
 	github.com/bradleyfalzon/ghinstallation/v2 v2.18.0
-	github.com/go-git/go-git/v5 v5.19.1
+	github.com/go-git/go-git/v5 v5.19.2
 	github.com/google/go-github/v72 v72.0.0
 	go.uber.org/ratelimit v0.3.1
-	golang.org/x/crypto v0.52.0
-	golang.org/x/mod v0.36.0
+	golang.org/x/crypto v0.56.0
+	golang.org/x/mod v0.40.0
 )
 
 require (
@@ -34,9 +34,9 @@ require (
 	github.com/pjbgf/sha1cd v0.6.0 // indirect
 	github.com/sergi/go-diff v1.4.0 // indirect
 	github.com/skeema/knownhosts v1.3.2 // indirect
-	github.com/supply-chain-tools/gitverify v0.0.0-20251119103248-be16911ec9be // indirect
+	github.com/supply-chain-tools/gitverify v0.0.0-20260703204026-314cf29725a0 // indirect
 	github.com/xanzy/ssh-agent v0.3.3 // indirect
-	golang.org/x/net v0.55.0 // indirect
-	golang.org/x/sys v0.45.0 // indirect
+	golang.org/x/net v0.57.0 // indirect
+	golang.org/x/sys v0.47.0 // indirect
 	gopkg.in/warnings.v0 v0.1.2 // indirect
 )

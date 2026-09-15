@@ -7,18 +7,19 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"github.com/go-git/go-git/v5"
-	"github.com/go-git/go-git/v5/plumbing"
-	"github.com/go-git/go-git/v5/plumbing/object"
-	"github.com/supply-chain-tools/gitverify/gitverify"
-	"github.com/supply-chain-tools/go-sandbox/gitkit"
-	"github.com/supply-chain-tools/go-sandbox/gitrelease"
 	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/plumbing/object"
+	"github.com/supply-chain-tools/gitverify/gitverify"
+	"github.com/supply-chain-tools/go-sandbox/gitkit"
+	"github.com/supply-chain-tools/go-sandbox/gitrelease"
 )
 
 const usage = `Usage:
@@ -71,7 +72,11 @@ func main() {
 		os.Exit(1)
 	}
 
-	_, orgName, repoName := gitverify.InferForgeOrgAndRepo(repo)
+	_, orgName, repoName, err := gitverify.InferForgeOrgAndRepo(repo)
+	if err != nil {
+		print("Unable to infer forge repo: ", err.Error(), "\n")
+		os.Exit(1)
+	}
 	repoPath := "https://github.com/" + orgName + "/" + repoName
 
 	tagMetadata, err := gitrelease.CreatePreviousTagPayload(repo, tagName, hash, previousTag, repoPath)
